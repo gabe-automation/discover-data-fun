@@ -39,13 +39,13 @@ export function keyBetween(a: string | null, b: string | null): string {
     const ca = i < lo.length ? D.indexOf(lo.charAt(i)) : 0;
     const cb = i < hi.length ? D.indexOf(hi.charAt(i)) : 36;
     if (ca === cb) {
-      res += D[ca];
+      res += D.charAt(ca);
       i++;
       continue;
     }
     const mid = Math.floor((ca + cb) / 2);
-    if (mid > ca) return res + D[mid] + D[Math.floor(Math.random() * 36)];
-    res += D[ca];
+    if (mid > ca) return res + D.charAt(mid) + D.charAt(Math.floor(Math.random() * 36));
+    res += D.charAt(ca);
     i++;
     hi = "";
   }
