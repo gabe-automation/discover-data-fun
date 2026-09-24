@@ -14,16 +14,278 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      activity: {
+        Row: {
+          action: string
+          actor_id: string | null
+          actor_name: string
+          created_at: string
+          detail: Json | null
+          id: number
+          outcome: string
+          project_id: string
+          target: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          actor_name: string
+          created_at?: string
+          detail?: Json | null
+          id?: number
+          outcome?: string
+          project_id: string
+          target: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          actor_name?: string
+          created_at?: string
+          detail?: Json | null
+          id?: number
+          outcome?: string
+          project_id?: string
+          target?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leases: {
+        Row: {
+          expires_at: string
+          holder_color: string
+          holder_id: string
+          holder_name: string
+          holder_session: string
+          node_id: string
+          project_id: string
+        }
+        Insert: {
+          expires_at: string
+          holder_color: string
+          holder_id: string
+          holder_name: string
+          holder_session: string
+          node_id: string
+          project_id: string
+        }
+        Update: {
+          expires_at?: string
+          holder_color?: string
+          holder_id?: string
+          holder_name?: string
+          holder_session?: string
+          node_id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leases_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nodes: {
+        Row: {
+          id: string
+          project_id: string
+          props: Json
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          project_id: string
+          props?: Json
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          props?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nodes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          color: string
+          created_at: string
+          display_name: string
+          id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          display_name?: string
+          id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      project_members: {
+        Row: {
+          created_at: string
+          project_id: string
+          role: Database["public"]["Enums"]["project_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          project_id: string
+          role?: Database["public"]["Enums"]["project_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          project_id?: string
+          role?: Database["public"]["Enums"]["project_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_members_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner_id: string
+          theme: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner_id: string
+          theme?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner_id?: string
+          theme?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      seen_ops: {
+        Row: {
+          created_at: string
+          op_id: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          op_id: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          op_id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seen_ops_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      _actor_name: { Args: never; Returns: string }
+      acquire_lease: {
+        Args: {
+          _heartbeat: boolean
+          _label: string
+          _node: string
+          _project: string
+          _session: string
+          _ttl: number
+        }
+        Returns: boolean
+      }
+      add_member_by_email: {
+        Args: {
+          _email: string
+          _project: string
+          _role: Database["public"]["Enums"]["project_role"]
+        }
+        Returns: string
+      }
+      apply_node_op: {
+        Args: {
+          _action: string
+          _actor: string
+          _clock: number
+          _label: string
+          _node: string
+          _op_id: string
+          _project: string
+          _props: Json
+          _session: string
+        }
+        Returns: string
+      }
+      can_edit: { Args: { _project: string; _user: string }; Returns: boolean }
+      create_project: { Args: { _name: string }; Returns: string }
+      is_member: { Args: { _project: string; _user: string }; Returns: boolean }
+      project_role_of: {
+        Args: { _project: string; _user: string }
+        Returns: Database["public"]["Enums"]["project_role"]
+      }
+      release_lease: {
+        Args: {
+          _label: string
+          _node: string
+          _project: string
+          _session: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
-      [_ in never]: never
+      project_role: "owner" | "editor" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +412,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      project_role: ["owner", "editor", "viewer"],
+    },
   },
 } as const
