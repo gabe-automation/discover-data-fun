@@ -41,7 +41,10 @@ function Projects() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     const { data, error } = await supabase.rpc("create_project", { _name: name });
-    if (error || !data) return toast.error("Couldn't create project");
+    if (error || !data) {
+      toast.error("Couldn't create project");
+      return;
+    }
     setName("");
     qc.invalidateQueries({ queryKey: ["projects"] });
     navigate({ to: "/p/$projectId", params: { projectId: data } });
