@@ -11,8 +11,8 @@ export function wins(cur: Reg | undefined, inc: Reg): boolean {
 
 export function mergeProps(cur: Props, inc: Props): Props {
   const out: Props = { ...cur };
-  for (const k of Object.keys(inc)) {
-    if (wins(out[k], inc[k])) out[k] = inc[k];
+  for (const [k, r] of Object.entries(inc)) {
+    if (wins(out[k], r)) out[k] = r;
   }
   return out;
 }
@@ -36,8 +36,8 @@ export function keyBetween(a: string | null, b: string | null): string {
   let res = "";
   let i = 0;
   for (;;) {
-    const ca = i < lo.length ? D.indexOf(lo[i]) : 0;
-    const cb = i < hi.length ? D.indexOf(hi[i]) : 36;
+    const ca = i < lo.length ? D.indexOf(lo.charAt(i)) : 0;
+    const cb = i < hi.length ? D.indexOf(hi.charAt(i)) : 36;
     if (ca === cb) {
       res += D[ca];
       i++;
