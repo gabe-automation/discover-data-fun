@@ -102,7 +102,7 @@ export function useRoom(projectId: string, me: Me | null) {
         setCursors((p) => ({ ...p, [c.session]: { ...c, t: Date.now() } }));
       })
       .on("broadcast", { event: "drag" }, ({ payload }) => {
-        const d = payload as { id: string; bp: string; x: number; y: number; w: number; h: number; done?: boolean };
+        const d = payload as { id: string; bp: string; x: number; y: number; w: number; h: number; done?: boolean | undefined };
         setDrags((p) => {
           const c = { ...p };
           if (d.done) delete c[d.id];
@@ -152,7 +152,7 @@ export function useRoom(projectId: string, me: Me | null) {
   );
 
   const lastDrag = useRef(0);
-  const sendDrag = useCallback((d: { id: string; bp: string; x: number; y: number; w: number; h: number; done?: boolean }) => {
+  const sendDrag = useCallback((d: { id: string; bp: string; x: number; y: number; w: number; h: number; done?: boolean | undefined }) => {
     const t = Date.now();
     if (!d.done && t - lastDrag.current < 40) return;
     lastDrag.current = t;

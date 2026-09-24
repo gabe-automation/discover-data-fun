@@ -348,7 +348,7 @@ function initials(n: string) {
 function Inspector(props: {
   node: NodeView;
   bp: Breakpoint;
-  lockedBy?: string;
+  lockedBy?: string | undefined;
   readOnly: boolean;
   onEdit: (f: "text" | "sub" | "label", v: string) => void;
   onGeo: (g: Geo) => void;
@@ -486,7 +486,7 @@ function CodeView({ exp, name }: { exp: { html: string; css: string; js: string 
 function TeamPanel(props: {
   projectId: string;
   isOwner: boolean;
-  members: { user_id: string; role: string; profile?: { display_name: string; color: string } }[];
+  members: { user_id: string; role: string; profile?: { display_name: string; color: string } | undefined }[];
   onChanged: () => void;
 }) {
   const [email, setEmail] = useState("");
