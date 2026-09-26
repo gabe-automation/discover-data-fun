@@ -1,7 +1,7 @@
 import { BREAKPOINTS, type Breakpoint } from "@/lib/blocks";
 import type { Activity } from "@/lib/useRoom";
 
-type G = { x?: number; y?: number; w?: number; h?: number };
+type G = { x?: number | undefined; y?: number | undefined; w?: number | undefined; h?: number | undefined };
 
 /** Small before/after visual of one change from the activity feed. */
 export function ActivityPreview({ a }: { a: Activity }) {
@@ -13,7 +13,7 @@ export function ActivityPreview({ a }: { a: Activity }) {
   // geometry per breakpoint (canvas) or plain x/y/w/h (whiteboard)
   const geos: { bp: string; b: G; a: G; width: number }[] = [];
   if (isBoard) {
-    const pick = (o: Record<string, unknown>) => ({ x: num(o.x), y: num(o.y), w: num(o.w), h: num(o.h) });
+    const pick = (o: Record<string, unknown>) => ({ x: num(o['x']), y: num(o['y']), w: num(o['w']), h: num(o['h']) });
     if (["x", "y", "w", "h"].some((k) => k in after)) geos.push({ bp: "board", b: pick(before), a: pick(after), width: 1200 });
   } else {
     for (const bp of Object.keys(BREAKPOINTS) as Breakpoint[]) {

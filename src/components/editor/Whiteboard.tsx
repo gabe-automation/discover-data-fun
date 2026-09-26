@@ -52,7 +52,7 @@ export function Whiteboard(p: Props) {
   const items = useMemo(() => {
     const out: Item[] = [];
     for (const [id, r] of Object.entries(p.nodes)) {
-      if (val(r, "type", "") !== "wb" || val(r, "page", "") !== p.pageId || val(r, "deleted", false)) continue;
+      if (val<string>(r, "type", "") !== "wb" || val(r, "page", "") !== p.pageId || val(r, "deleted", false)) continue;
       const kind = val<BoardKind>(r, "kind", "sticky");
       out.push({
         id, kind, x: val(r, "x", 0), y: val(r, "y", 0), w: val(r, "w", 100), h: val(r, "h", 100),
