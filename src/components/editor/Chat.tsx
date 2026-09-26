@@ -217,7 +217,7 @@ function renderBody(body: string, members: Member[]) {
   const names = members.map((m) => m.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length);
   const re = new RegExp(`(@(?:${names.join("|")}))`, "g");
   return body.split(re).map((part, i) =>
-    re.test(part) || part.startsWith("@") && members.some((m) => part === `@${m.name}`)
+    members.some((m) => part === `@${m.name}`)
       ? <span key={i} className="rounded bg-primary/15 px-1 font-medium text-primary">{part}</span>
       : <span key={i}>{part}</span>,
   );
