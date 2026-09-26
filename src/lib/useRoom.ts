@@ -18,9 +18,13 @@ export type Activity = {
   action: string;
   target: string;
   outcome: string;
-  detail: { holder?: string } | null;
+  detail: { holder?: string; type?: string; page?: string } | null;
+  node_id: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
   created_at: string;
 };
+export type Caret = { session: string; nodeId: string; name: string; color: string; t: number };
 export type Peer = { session: string; userId: string; name: string; color: string; status: "editing" | "watching" | "idle" };
 export type Cursor = { x: number; y: number; name: string; color: string; t: number };
 export type Me = { id: string; name: string; color: string };
@@ -35,6 +39,7 @@ export function useRoom(projectId: string, me: Me | null) {
   const [peers, setPeers] = useState<Peer[]>([]);
   const [cursors, setCursors] = useState<Record<string, Cursor>>({});
   const [drags, setDrags] = useState<Record<string, { bp: string; x: number; y: number; w: number; h: number }>>({});
+  const [carets, setCarets] = useState<Record<string, Caret>>({});
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const clock = useRef(0);
@@ -101,6 +106,10 @@ export function useRoom(projectId: string, me: Me | null) {
         const c = payload as Cursor & { session: string };
         setCursors((p) => ({ ...p, [c.session]: { ...c, t: Date.now() } }));
       })
+      .on("broadcast", { event: "caret" }, ({ payload }) => {
+        const c = payload as Caret;
+        setCarets((p) => ({ ...p, [c.session]: { ...c, t: Date.now() } }));
+      })
       .on("broadcast", { event: "drag" }, ({ payload }) => {
         const d = payload as { id: string; bp: string; x: number; y: number; w: number; h: number; done?: boolean | undefined };
         setDrags((p) => {
@@ -158,6 +167,26 @@ export function useRoom(projectId: string, me: Me | null) {
     lastDrag.current = t;
     channelRef.current?.send({ type: "broadcast", event: "drag", payload: d });
   }, []);
+
+  const lastCaret = useRef(0);
+  const sendCaret = useCallback(
+    (nodeId: string) => {
+      const t = Date.now();
+      if (t - lastCaret.current < 400 || !me) return;
+      lastCaret.current = t;
+      channelRef.current?.send({ type: "broadcast", event: "caret", payload: { session, nodeId, name: me.name, color: me.color } });
+    },
+    [me, session],
+  );
+
+  const forceRelease = useCallback(
+    async (nodeId: string, label: string) => {
+      const { data } = await supabase.rpc("force_release_lease", { _project: projectId, _node: nodeId, _label: label });
+      if (data) setLeases((p) => { const c = { ...p }; delete c[nodeId]; return c; });
+      return !!data;
+    },
+    [projectId],
+  );
 
   const refetchNode = useCallback(async (id: string) => {
     const { data } = await supabase.from("nodes").select("props").eq("id", id).maybeSingle();
@@ -220,10 +249,11 @@ export function useRoom(projectId: string, me: Me | null) {
 
   const activeLeases: Record<string, Lease> = {};
   for (const [k, l] of Object.entries(leases)) if (new Date(l.expires_at).getTime() > now) activeLeases[k] = l;
+  const liveCarets = Object.fromEntries(Object.entries(carets).filter(([k, c]) => k !== session && now - c.t < 3000));
   const liveCursors = Object.fromEntries(Object.entries(cursors).filter(([, c]) => now - c.t < 8000));
 
   return {
     session, loaded, nodes, leases: activeLeases, activity, peers, cursors: liveCursors, drags,
-    op, acquire, release, sendCursor, sendDrag, setStatus,
+    carets: liveCarets, op, acquire, release, forceRelease, sendCursor, sendDrag, sendCaret, setStatus,
   };
 }
