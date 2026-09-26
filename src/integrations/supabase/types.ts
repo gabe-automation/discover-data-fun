@@ -19,9 +19,12 @@ export type Database = {
           action: string
           actor_id: string | null
           actor_name: string
+          after: Json | null
+          before: Json | null
           created_at: string
           detail: Json | null
           id: number
+          node_id: string | null
           outcome: string
           project_id: string
           target: string
@@ -30,9 +33,12 @@ export type Database = {
           action: string
           actor_id?: string | null
           actor_name: string
+          after?: Json | null
+          before?: Json | null
           created_at?: string
           detail?: Json | null
           id?: number
+          node_id?: string | null
           outcome?: string
           project_id: string
           target: string
@@ -41,9 +47,12 @@ export type Database = {
           action?: string
           actor_id?: string | null
           actor_name?: string
+          after?: Json | null
+          before?: Json | null
           created_at?: string
           detail?: Json | null
           id?: number
+          node_id?: string | null
           outcome?: string
           project_id?: string
           target?: string
@@ -96,6 +105,51 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          activity_id: number | null
+          body: string
+          created_at: string
+          id: string
+          mentions: string[]
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: number | null
+          body: string
+          created_at?: string
+          id?: string
+          mentions?: string[]
+          project_id: string
+          user_id?: string
+        }
+        Update: {
+          activity_id?: number | null
+          body?: string
+          created_at?: string
+          id?: string
+          mentions?: string[]
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activity"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nodes: {
         Row: {
           id: string
@@ -118,6 +172,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "nodes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pages: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          project_id: string
+          sort: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: string
+          project_id: string
+          sort?: string
+          title?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          project_id?: string
+          sort?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pages_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -228,6 +317,38 @@ export type Database = {
           },
         ]
       }
+      text_updates: {
+        Row: {
+          created_at: string
+          id: number
+          node_id: string
+          project_id: string
+          update: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          node_id: string
+          project_id: string
+          update: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          node_id?: string
+          project_id?: string
+          update?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "text_updates_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -269,6 +390,10 @@ export type Database = {
       }
       can_edit: { Args: { _project: string; _user: string }; Returns: boolean }
       create_project: { Args: { _name: string }; Returns: string }
+      force_release_lease: {
+        Args: { _label: string; _node: string; _project: string }
+        Returns: boolean
+      }
       is_member: { Args: { _project: string; _user: string }; Returns: boolean }
       project_role_of: {
         Args: { _project: string; _user: string }
