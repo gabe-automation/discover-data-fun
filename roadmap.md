@@ -1,21 +1,18 @@
 # WebCraft roadmap
 
-## Done (milestone 1)
-- [x] Sign-in (email + Google), project list, create project
-- [x] Owner/editor/viewer roles, invite by email
-- [x] Canvas with 13 block types, drag/resize, snapping guides
-- [x] Per-property LWW sync (Lamport clock), op dedupe, ordered tree keys
-- [x] Element-level leases with heartbeat + 15s expiry, blocked writes logged to activity feed
-- [x] Live cursors, presence, live drag preview
-- [x] Per-breakpoint layout (desktop/tablet/mobile)
-- [x] Live HTML/CSS/JS export, copy, ZIP download; theme colors
+## Done
+- [x] Sign-in, projects, roles, invites
+- [x] Canvas blocks, per-breakpoint layout, export
+- [x] Block locking (multi-select, idle release, owner force-unlock)
+- [x] Drag/drop: multi-select, box select, grid snap, nudging, align/distribute, duplicate, layer order, pin
+- [x] Live character-level text merging (Yjs) + inline editing + typing indicators
+- [x] Blank pages + extra whiteboards (tabs)
+- [x] Live whiteboard with planning templates (kanban, timeline, SWOT), voting, checklists
+- [x] Team chat with @mentions and highlighted changes
+- [x] Activity before/after previews
 
 ## Next
-- [ ] Team chat panel
-- [ ] Shared whiteboard page
 - [ ] Revision history + rollback
-- [ ] Nested sections (children inside Section blocks)
-- [ ] Inline text editing on the canvas
+- [ ] Nested sections
 - [ ] Publish to subdomain
-- [ ] Remaining blocks: Dashboard shell, Chat widget, Section
 - [ ] Live theme sync to other open tabs
