@@ -18,11 +18,14 @@ export type Activity = {
   action: string;
   target: string;
   outcome: string;
-  detail: { holder?: string } | null;
+  detail: { holder?: string; type?: string; page?: string } | null;
   created_at: string;
+  node_id: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
 };
 export type Peer = { session: string; userId: string; name: string; color: string; status: "editing" | "watching" | "idle" };
-export type Cursor = { x: number; y: number; name: string; color: string; t: number };
+export type Cursor = { x: number; y: number; name: string; color: string; t: number; page?: string };
 export type Me = { id: string; name: string; color: string };
 
 const LEASE_TTL = 15;
@@ -142,11 +145,11 @@ export function useRoom(projectId: string, me: Me | null) {
 
   const lastCursor = useRef(0);
   const sendCursor = useCallback(
-    (x: number, y: number) => {
+    (x: number, y: number, page?: string) => {
       const t = Date.now();
       if (t - lastCursor.current < 50 || !me) return;
       lastCursor.current = t;
-      channelRef.current?.send({ type: "broadcast", event: "cursor", payload: { session, x, y, name: me.name, color: me.color } });
+      channelRef.current?.send({ type: "broadcast", event: "cursor", payload: { session, x, y, page, name: me.name, color: me.color } });
     },
     [me, session],
   );

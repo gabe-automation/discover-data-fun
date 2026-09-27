@@ -10,9 +10,15 @@
 - [x] Per-breakpoint layout (desktop/tablet/mobile)
 - [x] Live HTML/CSS/JS export, copy, ZIP download; theme colors
 
+## Done (milestone 2)
+- [x] Pages sidebar: blank page, whiteboard, team chat
+- [x] Yjs text co-editing (inspector fields + whiteboard notes)
+- [x] Whiteboard: shapes, pen, frames, voting, planning templates, locks
+- [x] Chat with @mentions and attached changes
+- [x] Activity click preview (before/after, mini render)
+- [x] Per-block style controls, layers with lock badges, shortcuts
+
 ## Next
-- [ ] Team chat panel
-- [ ] Shared whiteboard page
 - [ ] Revision history + rollback
 - [ ] Nested sections (children inside Section blocks)
 - [ ] Inline text editing on the canvas

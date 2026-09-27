@@ -117,3 +117,32 @@ export const BLOCK_CSS = `
 .wc-divider{border:0;border-top:1px solid color-mix(in srgb,var(--wc-ink) 18%,transparent);margin:11px 0;}
 .wc-footer{height:100%;display:flex;justify-content:space-between;align-items:center;padding:0 40px;font:14px system-ui,sans-serif;opacity:.75;border-top:1px solid color-mix(in srgb,var(--wc-ink) 12%,transparent);}
 `;
+
+// Per-block design overrides (stored as "s.<key>" properties on the node).
+export type BlockStyle = {
+  bg?: string; color?: string; btn?: string; radius?: number; pad?: number;
+  align?: "left" | "center" | "right"; opacity?: number; scale?: number;
+  border?: string; shadow?: boolean; font?: "serif" | "sans" | "mono";
+};
+export const STYLE_KEYS: (keyof BlockStyle)[] = ["bg", "color", "btn", "radius", "pad", "align", "opacity", "scale", "border", "shadow", "font"];
+const FONTS = { serif: "Georgia,'Times New Roman',serif", sans: "system-ui,-apple-system,sans-serif", mono: "ui-monospace,Menlo,monospace" };
+
+export function styleDecls(s: BlockStyle): [string, string][] {
+  const o: [string, string][] = [];
+  if (s.bg) o.push(["background", s.bg]);
+  if (s.color) o.push(["color", s.color], ["--wc-ink", s.color]);
+  if (s.btn) o.push(["--wc-primary", s.btn]);
+  if (s.radius) o.push(["border-radius", `${s.radius}px`]);
+  if (s.pad) o.push(["padding", `${s.pad}px`]);
+  if (s.align) o.push(["text-align", s.align]);
+  if (s.opacity !== undefined && s.opacity < 1) o.push(["opacity", String(s.opacity)]);
+  if (s.scale && s.scale !== 1) o.push(["zoom", String(s.scale)]);
+  if (s.border) o.push(["border", `2px solid ${s.border}`]);
+  if (s.shadow) o.push(["box-shadow", "0 18px 40px -18px rgba(0,0,0,.35)"]);
+  if (s.font) o.push(["font-family", FONTS[s.font]]);
+  return o;
+}
+export const styleCss = (s: BlockStyle) => styleDecls(s).map(([k, v]) => `${k}:${v};`).join("");
+export function styleObj(s: BlockStyle): Record<string, string> {
+  return Object.fromEntries(styleDecls(s).map(([k, v]) => [k.startsWith("--") ? k : k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()), v]));
+}

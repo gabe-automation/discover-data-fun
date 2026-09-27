@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { BLOCK_CSS, BREAKPOINTS, blockHtml, themeVars, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
+import { BLOCK_CSS, BREAKPOINTS, blockHtml, styleObj, themeVars, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
 import { pageHeight, type Geo, type NodeView } from "@/lib/model";
 import type { Cursor, Lease } from "@/lib/useRoom";
 
@@ -12,6 +12,7 @@ type Props = {
   mySession: string;
   leases: Record<string, Lease>;
   cursors: Record<string, Cursor>;
+  pageId: string;
   drags: Record<string, { bp: string } & Geo>;
   readOnly: boolean;
   onSelect: (id: string | null) => void;
@@ -145,6 +146,7 @@ export function Canvas(p: Props) {
             >
               <div
                 className="pointer-events-none h-full w-full overflow-hidden group-hover:outline group-hover:outline-1 group-hover:outline-[var(--ring)]"
+                style={styleObj(n.style) as React.CSSProperties}
                 dangerouslySetInnerHTML={{ __html: blockHtml(n.type, n, n.id) }}
               />
               {lockedByOther && (
@@ -152,7 +154,7 @@ export function Canvas(p: Props) {
                   className="absolute -top-3 right-1 z-10 flex items-center gap-1 rounded-full px-2 py-0.5 font-sans text-[10px] font-medium text-primary-foreground"
                   style={{ background: lease.holder_color }}
                 >
-                  🔒 {lease.holder_name}
+                  🔒 {lease.holder_name} is editing
                 </span>
               )}
               {isSel && !p.readOnly && (
@@ -171,7 +173,7 @@ export function Canvas(p: Props) {
           <div key={`gy${i}`} className="pointer-events-none absolute left-0 z-[9998] h-px bg-guide" style={{ top: y, width: pageW }} />
         ))}
         {Object.entries(p.cursors).map(([s, c]) =>
-          s === p.mySession ? null : (
+          s === p.mySession || c.page !== p.pageId ? null : (
             <div key={s} className="pointer-events-none absolute z-[9999] transition-all duration-75" style={{ left: c.x, top: c.y }}>
               <svg width="18" height="18" viewBox="0 0 24 24" style={{ color: c.color }} fill="currentColor"><path d="M3 2l18 8-8 3-3 8z" /></svg>
               <span className="ml-3 rounded px-1.5 py-0.5 font-sans text-[11px] text-primary-foreground" style={{ background: c.color }}>{c.name}</span>
