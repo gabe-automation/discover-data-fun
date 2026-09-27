@@ -11,7 +11,7 @@ export function CollabTextarea(props: {
   disabled?: boolean;
   rows?: number;
   className?: string;
-  onCommit?: (v: string) => void;
+  onCommit?: ((v: string) => void) | undefined;
 }) {
   const { shared, k, seed } = props;
   const ref = useRef<HTMLTextAreaElement>(null);

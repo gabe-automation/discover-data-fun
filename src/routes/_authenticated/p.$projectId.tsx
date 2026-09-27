@@ -198,7 +198,7 @@ function EditorPage() {
     const y = copy ? copy.geo.desktop.y + 24 : at && bp === "desktop" ? Math.round(at.y - h / 2) : lowest + 32;
     const extra: Record<string, unknown> = {};
     if (copy) {
-      extra.text = copy.text; extra.sub = copy.sub; extra.label = copy.label;
+      extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label;
       for (const [k, v] of Object.entries(copy.style)) extra[`s.${k}`] = v;
     }
     await room.op(
@@ -262,7 +262,7 @@ function EditorPage() {
     if (!pr) { toast.info("That item no longer exists."); return; }
     const target = val<string | null>(pr, "page", null) ?? firstCanvas;
     if (target) setPageId(target);
-    if (val(pr, "kind", "") !== "wb") setTimeout(() => select(a.node_id), 50);
+    if (val<string>(pr, "kind", "") !== "wb") setTimeout(() => select(a.node_id), 50);
   }
 
   if (info && !info.project) {

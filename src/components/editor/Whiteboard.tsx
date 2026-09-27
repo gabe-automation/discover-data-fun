@@ -54,7 +54,7 @@ export function Whiteboard(p: {
   const items = useMemo(() => {
     const out: WB[] = [];
     for (const [id, pr] of Object.entries(p.nodes)) {
-      if (val(pr, "kind", "") !== "wb" || val(pr, "page", "") !== p.pageId || val(pr, "deleted", false)) continue;
+      if (val<string>(pr, "kind", "") !== "wb" || val(pr, "page", "") !== p.pageId || val(pr, "deleted", false)) continue;
       let votes = 0;
       for (const [k, r] of Object.entries(pr)) if (k.startsWith("vote:") && r.v === true) votes++;
       out.push({
