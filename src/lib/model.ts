@@ -1,4 +1,4 @@
-import { BLOCKS, BLOCK_CSS, BREAKPOINTS, blockHtml, themeVars, esc, type BlockType, type Breakpoint, type Theme } from "./blocks";
+import { BLOCKS, BLOCK_CSS, BREAKPOINTS, STYLE_KEYS, blockHtml, styleCss, themeVars, esc, type BlockStyle, type BlockType, type Breakpoint, type Theme } from "./blocks";
 import { val, type Props } from "./crdt";
 
 export type Geo = { x: number; y: number; w: number; h: number };
@@ -10,8 +10,19 @@ export type NodeView = {
   text: string;
   sub: string;
   label: string;
+  page: string | null;
+  style: BlockStyle;
   geo: Record<Breakpoint, Geo>;
 };
+
+export function styleOf(p: Props): BlockStyle {
+  const o: Record<string, unknown> = {};
+  for (const k of STYLE_KEYS) {
+    const v = val<unknown>(p, `s.${k}`, undefined);
+    if (v !== undefined && v !== "") o[k] = v;
+  }
+  return o as BlockStyle;
+}
 
 export function geoFor(p: Props, bp: Breakpoint): Geo {
   const d: Geo = {
@@ -48,6 +59,8 @@ export function toView(id: string, p: Props): NodeView | null {
     text: val(p, "text", def.text),
     sub: val(p, "sub", def.sub),
     label: val(p, "label", def.label),
+    page: val<string | null>(p, "page", null),
+    style: styleOf(p),
     geo: { desktop: geoFor(p, "desktop"), tablet: geoFor(p, "tablet"), mobile: geoFor(p, "mobile") },
   };
 }
@@ -86,7 +99,7 @@ ${body}
     sorted
       .map((n) => {
         const g = n.geo[bp];
-        return `  #${shortId(n.id)}{left:${g.x}px;top:${g.y}px;width:${g.w}px;height:${g.h}px;z-index:${sorted.indexOf(n) + 1};}`;
+        return `  #${shortId(n.id)}{${bp === "desktop" ? styleCss(n.style) : ""}left:${g.x}px;top:${g.y}px;width:${g.w}px;height:${g.h}px;z-index:${sorted.indexOf(n) + 1};}`;
       })
       .join("\n");
   const css = `:root{${themeVars(theme)}}
