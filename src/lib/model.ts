@@ -10,8 +10,6 @@ export type NodeView = {
   text: string;
   sub: string;
   label: string;
-  page: string;
-  pinned: boolean;
   geo: Record<Breakpoint, Geo>;
 };
 
@@ -37,8 +35,7 @@ export function geoFor(p: Props, bp: Breakpoint): Geo {
   };
 }
 
-export type PlainFn = (id: string, field: string) => string | undefined;
-export function toView(id: string, p: Props, plain?: PlainFn): NodeView | null {
+export function toView(id: string, p: Props): NodeView | null {
   if (val(p, "deleted", false)) return null;
   const type = val<string>(p, "type", "") as BlockType;
   const def = BLOCKS[type];
@@ -48,11 +45,9 @@ export function toView(id: string, p: Props, plain?: PlainFn): NodeView | null {
     type,
     parent: val<string | null>(p, "parent", null),
     order: val(p, "order", "m"),
-    text: plain?.(id, "text") ?? val(p, "text", def.text),
-    sub: plain?.(id, "sub") ?? val(p, "sub", def.sub),
-    label: plain?.(id, "label") ?? val(p, "label", def.label),
-    page: val(p, "page", "main"),
-    pinned: val(p, "pinned", false),
+    text: val(p, "text", def.text),
+    sub: val(p, "sub", def.sub),
+    label: val(p, "label", def.label),
     geo: { desktop: geoFor(p, "desktop"), tablet: geoFor(p, "tablet"), mobile: geoFor(p, "mobile") },
   };
 }
