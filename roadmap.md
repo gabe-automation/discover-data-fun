@@ -18,6 +18,12 @@
 - [x] Activity click preview (before/after, mini render)
 - [x] Per-block style controls, layers with lock badges, shortcuts
 
+## Done (milestone 3)
+- [x] AI planner: goal -> milestones + prioritized tasks on the whiteboard
+- [x] Drag & drop settings with workflow presets (grid, axis, drop, nudge, frames)
+- [x] Selective node locks (pin / full lock, allowed members, server-enforced)
+- [x] Visible "New blank page" button
+
 ## Next
 - [ ] Revision history + rollback
 - [ ] Nested sections (children inside Section blocks)
