@@ -23,7 +23,7 @@ export function LockControl(props: {
     if (lock) props.onSet(lock.mode, n);
   };
   return (
-    <section className="space-y-2 rounded-lg border p-3">
+    <section className="mb-4 mt-1 space-y-2 rounded-lg border p-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Lock</h3>
         {lock && <span className="text-[11px] text-muted-foreground">{lock.mode === "move" ? "Pinned" : "Locked"} by {lock.locked_by_name}</span>}
