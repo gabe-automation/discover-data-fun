@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { BLOCK_CSS, BREAKPOINTS, blockHtml, styleObj, themeVars, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
 import { pageHeight, type Geo, type NodeView } from "@/lib/model";
-import type { Cursor, Lease } from "@/lib/useRoom";
+import type { Cursor, Lease, NodeLock } from "@/lib/useRoom";
+import { snapGrid, type DragPrefs } from "@/lib/dragPrefs";
 
 type Props = {
   nodes: NodeView[];
@@ -15,6 +16,9 @@ type Props = {
   pageId: string;
   drags: Record<string, { bp: string } & Geo>;
   readOnly: boolean;
+  prefs: DragPrefs;
+  locks: Record<string, NodeLock>;
+  canOverride: (l: NodeLock) => boolean;
   onSelect: (id: string | null) => void;
   onCommit: (id: string, g: Geo, kind: "moved" | "resized") => void;
   onLiveDrag: (id: string, g: Geo, done?: boolean) => void;
@@ -36,7 +40,16 @@ export function Canvas(p: Props) {
     return { x: (e.clientX - r.left) / p.scale, y: (e.clientY - r.top) / p.scale };
   };
 
-  function snap(id: string, g: Geo, resizing: boolean): { g: Geo; gx: number[]; gy: number[] } {
+  function snap(id: string, g: Geo, resizing: boolean, free = false): { g: Geo; gx: number[]; gy: number[] } {
+    if (free || (!p.prefs.guides && !p.prefs.grid)) {
+      const o = { x: Math.round(g.x), y: Math.max(0, Math.round(g.y)), w: Math.max(24, Math.round(g.w)), h: Math.max(16, Math.round(g.h)) };
+      return { g: o, gx: [], gy: [] };
+    }
+    if (!p.prefs.guides) {
+      const G = p.prefs.grid;
+      const o = resizing ? { ...g, w: snapGrid(g.x + g.w, G) - g.x, h: snapGrid(g.y + g.h, G) - g.y } : { ...g, x: snapGrid(g.x, G), y: snapGrid(g.y, G) };
+      return { g: { x: Math.round(o.x), y: Math.max(0, Math.round(o.y)), w: Math.max(24, Math.round(o.w)), h: Math.max(16, Math.round(o.h)) }, gx: [], gy: [] };
+    }
     const xs: number[] = [0, pageW, pageW / 2];
     const ys: number[] = [0];
     for (const n of p.nodes) {
@@ -46,6 +59,11 @@ export function Canvas(p: Props) {
       ys.push(o.y, o.y + o.h, o.y + o.h / 2);
     }
     const out = { ...g };
+    if (p.prefs.grid) {
+      if (resizing) { out.w = snapGrid(g.x + g.w, p.prefs.grid) - g.x; out.h = snapGrid(g.y + g.h, p.prefs.grid) - g.y; }
+      else { out.x = snapGrid(g.x, p.prefs.grid); out.y = snapGrid(g.y, p.prefs.grid); }
+      g = { ...out };
+    }
     const gx: number[] = [];
     const gy: number[] = [];
     const tryAxis = (edges: number[], targets: number[], apply: (d: number) => void, hits: number[]) => {
@@ -72,17 +90,21 @@ export function Canvas(p: Props) {
     if (p.readOnly || e.button !== 0) return;
     e.stopPropagation();
     p.onSelect(n.id);
+    const nl = p.locks[n.id];
+    if (nl && !p.canOverride(nl)) return;
     const start = toPage(e);
     const orig = n.geo[p.bp];
     let last = orig;
     let moved = false;
     const move = (ev: PointerEvent) => {
       const cur = toPage(ev);
-      const dx = cur.x - start.x, dy = cur.y - start.y;
+      let dx = cur.x - start.x, dy = cur.y - start.y;
+      if (!resizing && p.prefs.axis === "x") dy = 0;
+      if (!resizing && p.prefs.axis === "y") dx = 0;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 3) return;
       moved = true;
       const raw = resizing ? { ...orig, w: orig.w + dx, h: orig.h + dy } : { ...orig, x: orig.x + dx, y: orig.y + dy };
-      const s = snap(n.id, raw, resizing);
+      const s = snap(n.id, raw, resizing, ev.altKey);
       last = s.g;
       setLocal({ id: n.id, g: s.g });
       setGuides({ x: s.gx, y: s.gy });
@@ -129,6 +151,8 @@ export function Canvas(p: Props) {
           const g = local?.id === n.id ? local.g : remote && remote.bp === p.bp ? remote : n.geo[p.bp];
           const lease = p.leases[n.id];
           const lockedByOther = lease && lease.holder_session !== p.mySession;
+          const nl = p.locks[n.id];
+          const pinned = !!nl && !p.canOverride(nl);
           const isSel = p.selected === n.id;
           return (
             <div
@@ -137,7 +161,7 @@ export function Canvas(p: Props) {
               style={{
                 left: g.x, top: g.y, width: g.w, height: g.h, zIndex: i + 1,
                 overflow: "visible",
-                cursor: p.readOnly ? "default" : lockedByOther ? "not-allowed" : "move",
+                cursor: p.readOnly ? "default" : lockedByOther || pinned ? "not-allowed" : "move",
                 outline: isSel ? "2px solid var(--primary)" : lockedByOther ? `2px dashed ${lease.holder_color}` : undefined,
                 outlineOffset: 2,
                 transition: remote ? "left 60ms linear, top 60ms linear" : undefined,
@@ -157,7 +181,12 @@ export function Canvas(p: Props) {
                   🔒 {lease.holder_name} is editing
                 </span>
               )}
-              {isSel && !p.readOnly && (
+              {nl && !lockedByOther && (
+                <span className="absolute -top-3 left-1 z-10 rounded-full border bg-card px-2 py-0.5 font-sans text-[10px] font-medium text-foreground shadow-sm">
+                  {nl.mode === "move" ? "📌 Pinned" : "🔒 Locked"} by {nl.locked_by_name}{pinned ? "" : " · you can edit"}
+                </span>
+              )}
+              {isSel && !p.readOnly && !pinned && (
                 <div
                   className="absolute -bottom-1.5 -right-1.5 z-10 size-3 cursor-se-resize rounded-sm border-2 border-primary bg-card"
                   onPointerDown={(e) => startDrag(e, n, true)}

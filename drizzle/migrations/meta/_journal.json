@@ -15,6 +15,13 @@
       "when": 1790496680906,
       "tag": "0001_realtime_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790582362428,
+      "tag": "0002_node_locks",
+      "breakpoints": true
     }
   ]
 }

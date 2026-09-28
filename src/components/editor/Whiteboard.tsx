@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  ArrowUpRight, Circle, Frame, Hand, LayoutTemplate, Minus, MousePointer2, Pencil, Square, StickyNote, ThumbsUp, Trash2, Type, ZoomIn, ZoomOut, Copy, Lock,
+  ArrowUpRight, Circle, Frame, Hand, LayoutTemplate, Minus, MousePointer2, Pencil, Square, StickyNote, ThumbsUp, Trash2, Type, ZoomIn, ZoomOut, Copy, Lock, Pin, Unlock, Sparkles, Loader2,
 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { generatePlan, type Plan } from "@/lib/planner.functions";
+import { snapGrid, type DragPrefs } from "@/lib/dragPrefs";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { keyBetween, val, type Props } from "@/lib/crdt";
-import type { Cursor, Lease } from "@/lib/useRoom";
+import type { Cursor, Lease, NodeLock } from "@/lib/useRoom";
 import type { SharedText } from "@/lib/sharedText";
 import { CollabTextarea } from "./CollabTextarea";
 
@@ -39,6 +44,11 @@ export function Whiteboard(p: {
   readOnly: boolean;
   shared: SharedText;
   ops: Ops;
+  projectId: string;
+  prefs: DragPrefs;
+  locks: Record<string, NodeLock>;
+  canOverride: (l: NodeLock) => boolean;
+  onLock: (id: string, mode: NodeLock["mode"] | null, label: string) => void;
 }) {
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState(COLORS[0]!);
@@ -78,12 +88,15 @@ export function Whiteboard(p: {
   };
   const lockedByOther = (id: string) => { const l = p.leases[id]; return l && l.holder_session !== p.session ? l : null; };
 
+  const pinned = (id: string) => { const l = p.locks[id]; return l && !p.canOverride(l) ? l : null; };
+  const frozen = (id: string) => pinned(id)?.mode === "full";
+
   async function select(id: string | null) {
     if (id === selected) return;
     if (held.current) { p.ops.release(held.current.id, held.current.label); held.current = null; }
     setSelected(id);
     setEditing(null);
-    if (!id || p.readOnly) return;
+    if (!id || p.readOnly || !p.prefs.lockOnSelect) return;
     const w = items.find((x) => x.id === id);
     if (!w) return;
     const ok = await p.ops.acquire(id, label(w));
@@ -155,17 +168,24 @@ export function Whiteboard(p: {
     select(w.id);
     if (p.readOnly || editing === w.id) return;
     if (lockedByOther(w.id)) return;
+    const pl = pinned(w.id);
+    if (pl) { toast.info(`${label(w)} is ${pl.mode === "move" ? "pinned" : "locked"} by ${pl.locked_by_name}.`); return; }
     const start = toBoard(e);
     const orig: G = { x: w.x, y: w.y, w: w.w, h: w.h };
     let last = orig, moved = false;
     // frames carry their contents along
-    const inside = w.shape === "frame" && !resize ? items.filter((o) => o.id !== w.id && o.x >= w.x && o.y >= w.y && o.x + Math.abs(o.w) <= w.x + w.w && o.y + Math.abs(o.h) <= w.y + w.h) : [];
+    const inside = w.shape === "frame" && !resize && p.prefs.frameCarry ? items.filter((o) => o.id !== w.id && o.x >= w.x && o.y >= w.y && o.x + Math.abs(o.w) <= w.x + w.w && o.y + Math.abs(o.h) <= w.y + w.h) : [];
     const mv = (ev: PointerEvent) => {
       const c = toBoard(ev);
-      const dx = c.x - start.x, dy = c.y - start.y;
+      let dx = c.x - start.x, dy = c.y - start.y;
+      if (!resize && p.prefs.axis === "x") dy = 0;
+      if (!resize && p.prefs.axis === "y") dx = 0;
       if (!moved && Math.abs(dx) + Math.abs(dy) < 3) return;
       moved = true;
-      last = resize ? { ...orig, w: isLine(w.shape) ? orig.w + dx : Math.max(30, orig.w + dx), h: isLine(w.shape) ? orig.h + dy : Math.max(24, orig.h + dy) } : { ...orig, x: Math.round(orig.x + dx), y: Math.round(orig.y + dy) };
+      const G = ev.altKey ? 0 : p.prefs.grid;
+      last = resize
+        ? { ...orig, w: isLine(w.shape) ? orig.w + dx : Math.max(30, snapGrid(orig.x + orig.w + dx, G) - orig.x), h: isLine(w.shape) ? orig.h + dy : Math.max(24, snapGrid(orig.y + orig.h + dy, G) - orig.y) }
+        : { ...orig, x: Math.round(snapGrid(orig.x + dx, G)), y: Math.round(snapGrid(orig.y + dy, G)) };
       setLocal({ id: w.id, g: last });
       p.ops.sendDrag({ id: w.id, bp: "wb", ...last });
     };
@@ -176,19 +196,20 @@ export function Whiteboard(p: {
       p.ops.sendDrag({ id: w.id, bp: "wb", ...last, done: true });
       p.ops.op(w.id, { x: Math.round(last.x), y: Math.round(last.y), w: Math.round(last.w), h: Math.round(last.h) }, resize ? "resized" : "moved", label(w));
       const dx = last.x - orig.x, dy = last.y - orig.y;
-      for (const o of inside) if (!lockedByOther(o.id)) p.ops.op(o.id, { x: o.x + dx, y: o.y + dy }, "moved", label(o));
+      for (const o of inside) if (!lockedByOther(o.id) && !pinned(o.id)) p.ops.op(o.id, { x: o.x + dx, y: o.y + dy }, "moved", label(o));
     };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   }
 
   const sel = items.find((x) => x.id === selected) ?? null;
   const selLocked = sel ? lockedByOther(sel.id) : null;
+  const selPin = sel ? pinned(sel.id) : null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
-      if (sel && !p.readOnly && !selLocked && (e.key === "Delete" || e.key === "Backspace")) { p.ops.op(sel.id, { deleted: true }, "deleted", label(sel)); select(null); }
+      if (sel && !p.readOnly && !selLocked && !selPin && (e.key === "Delete" || e.key === "Backspace")) { p.ops.op(sel.id, { deleted: true }, "deleted", label(sel)); select(null); }
       const map: Record<string, Tool> = { v: "select", h: "hand", s: "sticky", r: "rect", o: "ellipse", t: "text", l: "line", a: "arrow", p: "pen", f: "frame" };
       if (!e.metaKey && !e.ctrlKey && map[e.key]) setTool(map[e.key]!);
     };
@@ -212,6 +233,40 @@ export function Whiteboard(p: {
     else if (kind === "matrix") await frames(["Do first · urgent & important", "Schedule · important", "Delegate · urgent", "Drop · neither"], 2, 520, 360);
     else await frames(["Went well", "To improve", "Action items"], 3, 380, 560);
     toast.success("Template added");
+  }
+
+  const [aiOpen, setAiOpen] = useState(false);
+  const [goal, setGoal] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const planFn = useServerFn(generatePlan);
+  async function runPlanner() {
+    if (goal.trim().length < 3 || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const r = await planFn({ data: { projectId: p.projectId, goal: goal.trim() } });
+      if (!r.ok) { toast.error(r.error); return; }
+      await placePlan(r.plan);
+      setAiOpen(false);
+      setGoal("");
+      toast.success(`Plan added: ${r.plan.milestones.length} milestones`);
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "Couldn't create the plan.");
+    } finally { setAiBusy(false); }
+  }
+  async function placePlan(plan: Plan) {
+    const el = scrollRef.current!;
+    const ox = Math.round(el.scrollLeft / zoom + 60), oy = Math.round(el.scrollTop / zoom + 80);
+    const PRI = { high: "#fbcfe8", medium: "#fde68a", low: "#bbf7d0" } as const;
+    const colW = 300, gap = 32, cardH = 130;
+    await create("text", { x: ox, y: oy - 70, w: Math.max(600, plan.milestones.length * (colW + gap)), h: 56 }, { text: `🎯 ${goal.trim()}\n${plan.summary}`, color: "#1c1917" });
+    await create("arrow", { x: ox, y: oy - 8, w: plan.milestones.length * (colW + gap) - gap, h: 0 }, { color: "#1c1917" });
+    for (const [i, ms] of plan.milestones.entries()) {
+      const x = ox + i * (colW + gap);
+      const fh = 60 + ms.tasks.length * (cardH + 16);
+      await create("frame", { x, y: oy + 10, w: colW, h: fh }, { text: `${ms.when ? ms.when + " · " : ""}${ms.title}` }, keyBetween(null, items[0]?.order ?? null));
+      await Promise.all(ms.tasks.map((t, j) => create("sticky", { x: x + 20, y: oy + 60 + j * (cardH + 16), w: colW - 40, h: cardH },
+        { text: `${t.priority === "high" ? "▲ High" : t.priority === "low" ? "▽ Low" : "◆ Medium"} · ${t.title}\n${t.detail}`, color: PRI[t.priority] })));
+    }
   }
 
   const tools: { t: Tool; icon: typeof Square; k: string; name: string }[] = [
@@ -238,6 +293,7 @@ export function Whiteboard(p: {
             className={`size-5 rounded-full border ${color === c ? "ring-2 ring-ring ring-offset-1" : ""}`} style={{ background: c }} />
         ))}
         <span className="mx-1 h-6 w-px bg-border" />
+        <Button size="sm" variant="ghost" disabled={p.readOnly} onClick={() => setAiOpen(true)}><Sparkles className="size-4" /> AI plan</Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" disabled={p.readOnly}><LayoutTemplate className="size-4" /> Plan</Button></DropdownMenuTrigger>
           <DropdownMenuContent>
@@ -255,9 +311,19 @@ export function Whiteboard(p: {
       {sel && (
         <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-sm shadow-lift">
           <span className="font-medium">{NAMES[sel.shape]}</span>
+          {selPin && !selLocked && (
+            <span className="flex items-center gap-1 text-muted-foreground">{selPin.mode === "move" ? <Pin className="size-3.5" /> : <Lock className="size-3.5" />} {selPin.mode === "move" ? "Pinned" : "Locked"} by {selPin.locked_by_name}</span>
+          )}
+          {!p.readOnly && !selLocked && (!p.locks[sel.id] || p.canOverride(p.locks[sel.id]!)) && (
+            <span className="flex items-center gap-0.5 border-r pr-2">
+              <Button size="icon" variant={!p.locks[sel.id] ? "secondary" : "ghost"} className="size-7" title="Unlocked" aria-label="Unlock" onClick={() => p.onLock(sel.id, null, label(sel))}><Unlock className="size-3.5" /></Button>
+              <Button size="icon" variant={p.locks[sel.id]?.mode === "move" ? "secondary" : "ghost"} className="size-7" title="Pin: others can't move it" aria-label="Pin" onClick={() => p.onLock(sel.id, "move", label(sel))}><Pin className="size-3.5" /></Button>
+              <Button size="icon" variant={p.locks[sel.id]?.mode === "full" ? "secondary" : "ghost"} className="size-7" title="Lock: others can't change it" aria-label="Lock" onClick={() => p.onLock(sel.id, "full", label(sel))}><Lock className="size-3.5" /></Button>
+            </span>
+          )}
           {selLocked ? (
             <span className="flex items-center gap-1 text-muted-foreground"><Lock className="size-3.5" /> {selLocked.holder_name} is editing</span>
-          ) : !p.readOnly && (
+          ) : !p.readOnly && !selPin && (
             <>
               <Button size="icon" variant="ghost" className="size-7" aria-label="Duplicate" onClick={() => create(sel.shape, { x: sel.x + 24, y: sel.y + 24, w: sel.w, h: sel.h }, { text: textOf(sel), color: sel.color, points: sel.points })}><Copy className="size-3.5" /></Button>
               <Button size="icon" variant="ghost" className="size-7" aria-label="Delete" onClick={() => { p.ops.op(sel.id, { deleted: true }, "deleted", label(sel)); select(null); }}><Trash2 className="size-3.5" /></Button>
@@ -287,7 +353,7 @@ export function Whiteboard(p: {
                 <ShapeView key={w.id} w={w} g={g} text={textOf(w)} selected={selected === w.id} lock={lock} readOnly={p.readOnly}
                   editing={editing === w.id} shared={p.shared}
                   onDown={(e) => startMove(e, w, false)} onResize={(e) => startMove(e, w, true)}
-                  onEdit={() => { if (!p.readOnly && !lock && ["sticky", "text", "frame", "rect", "ellipse"].includes(w.shape)) setEditing(w.id); }}
+                  onEdit={() => { if (!p.readOnly && !lock && !frozen(w.id) && ["sticky", "text", "frame", "rect", "ellipse"].includes(w.shape)) setEditing(w.id); }}
                   onCommit={(v) => { if (v !== w.text) p.ops.op(w.id, { text: v }, "edited", label(w)); }}
                   onVote={() => p.ops.op(w.id, { [`vote:${p.userId}`]: !w.myVote }, w.myVote ? "unvoted" : "voted", label(w))} />
               );
@@ -302,6 +368,24 @@ export function Whiteboard(p: {
           </div>
         </div>
       </div>
+
+      <Dialog open={aiOpen} onOpenChange={(o) => !aiBusy && setAiOpen(o)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Sparkles className="size-5" /> Plan with AI</DialogTitle>
+            <DialogDescription>Describe what your team wants to achieve. You'll get milestones with prioritized tasks placed on this board for everyone.</DialogDescription>
+          </DialogHeader>
+          <Textarea autoFocus rows={5} value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={1500}
+            placeholder="e.g. Launch a landing page for our coffee subscription with a signup form in 3 weeks"
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runPlanner(); }} />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAiOpen(false)} disabled={aiBusy}>Cancel</Button>
+            <Button onClick={runPlanner} disabled={aiBusy || goal.trim().length < 3}>
+              {aiBusy ? <><Loader2 className="size-4 animate-spin" /> Planning…</> : <><Sparkles className="size-4" /> Generate plan</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

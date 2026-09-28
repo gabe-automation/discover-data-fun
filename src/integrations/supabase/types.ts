@@ -150,6 +150,44 @@ export type Database = {
           },
         ]
       }
+      node_locks: {
+        Row: {
+          allowed: string[]
+          created_at: string
+          locked_by: string
+          locked_by_name: string
+          mode: string
+          node_id: string
+          project_id: string
+        }
+        Insert: {
+          allowed?: string[]
+          created_at?: string
+          locked_by: string
+          locked_by_name?: string
+          mode?: string
+          node_id: string
+          project_id: string
+        }
+        Update: {
+          allowed?: string[]
+          created_at?: string
+          locked_by?: string
+          locked_by_name?: string
+          mode?: string
+          node_id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "node_locks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nodes: {
         Row: {
           id: string
@@ -355,6 +393,10 @@ export type Database = {
     }
     Functions: {
       _actor_name: { Args: never; Returns: string }
+      _lock_blocks: {
+        Args: { _node: string; _project: string; _props: Json; _user: string }
+        Returns: string
+      }
       acquire_lease: {
         Args: {
           _heartbeat: boolean
@@ -407,6 +449,16 @@ export type Database = {
           _session: string
         }
         Returns: undefined
+      }
+      set_node_lock: {
+        Args: {
+          _allowed: string[]
+          _label: string
+          _mode: string
+          _node: string
+          _project: string
+        }
+        Returns: string
       }
     }
     Enums: {

@@ -24,6 +24,10 @@ import { keyBetween, val } from "@/lib/crdt";
 import { useRoom, type Activity, type Me } from "@/lib/useRoom";
 import { useSharedText, type SharedText } from "@/lib/sharedText";
 import { useChat } from "@/lib/useChat";
+import { useDragPrefs } from "@/lib/dragPrefs";
+import { DragSettings } from "@/components/editor/DragSettings";
+import { LockControl } from "@/components/editor/LockControl";
+import type { NodeLock } from "@/lib/useRoom";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({
@@ -73,6 +77,9 @@ function EditorPage() {
     }),
     [info],
   );
+  const isOwner = myRole === "owner";
+  const [prefs, setPrefs] = useDragPrefs(projectId);
+  const canOverride = (l: NodeLock) => l.locked_by === user.id || isOwner || l.allowed.includes(user.id);
   const nameOf = (id: string) => members.find((m) => m.id === id)?.name ?? "Someone";
 
   // ---------- pages ----------
@@ -175,7 +182,7 @@ function EditorPage() {
     if (prev) room.release(prev.id, prev.label);
     setSelected(id);
     room.setStatus(id ? "editing" : "watching");
-    if (!id || readOnly) return;
+    if (!id || readOnly || !prefs.lockOnSelect) return;
     const v = views.find((x) => x.id === id);
     if (!v) return;
     const label = labelOf(v);
@@ -194,8 +201,11 @@ function EditorPage() {
     const w = copy ? copy.geo.desktop.w : Math.min(def.w, pageW);
     const h = copy ? copy.geo.desktop.h : def.h;
     const lowest = views.reduce((m, v) => Math.max(m, v.geo.desktop.y + v.geo.desktop.h), 0);
-    const x = copy ? copy.geo.desktop.x + 24 : at && bp === "desktop" ? Math.round(at.x - w / 2) : Math.round((pageW - w) / 2);
-    const y = copy ? copy.geo.desktop.y + 24 : at && bp === "desktop" ? Math.round(at.y - h / 2) : lowest + 32;
+    const G = prefs.grid;
+    const useCursor = at && bp === "desktop" && prefs.drop === "cursor";
+    const sg = (v: number) => (G ? Math.round(v / G) * G : v);
+    const x = copy ? copy.geo.desktop.x + 24 : useCursor ? sg(Math.round(at.x - w / 2)) : prefs.drop === "stack" ? 0 : Math.round((pageW - w) / 2);
+    const y = copy ? copy.geo.desktop.y + 24 : useCursor ? sg(Math.round(at.y - h / 2)) : sg(lowest + 32);
     const extra: Record<string, unknown> = {};
     if (copy) {
       extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label;
@@ -219,14 +229,17 @@ function EditorPage() {
     room.op(id, { [`x@${bp}`]: g.x, [`y@${bp}`]: g.y, [`w@${bp}`]: g.w, [`h@${bp}`]: g.h }, kind, labelOf(v));
   }
 
-  const selLockedBy = sel && room.leases[sel.id] && room.leases[sel.id]!.holder_session !== room.session ? room.leases[sel.id]!.holder_name : undefined;
+  const selPin = sel && room.locks[sel.id] && !canOverride(room.locks[sel.id]!) ? room.locks[sel.id]! : null;
+  const selLockedBy = sel && room.leases[sel.id] && room.leases[sel.id]!.holder_session !== room.session ? room.leases[sel.id]!.holder_name
+    : selPin?.mode === "full" ? `${selPin.locked_by_name} (locked)` : undefined;
 
   // keyboard: nudge, duplicate, delete
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (!sel || readOnly || selLockedBy || page?.kind !== "canvas" || t.tagName === "TEXTAREA" || t.tagName === "INPUT") return;
-      const step = e.shiftKey ? 10 : 1;
+      if (selPin) return;
+      const step = e.shiftKey ? prefs.nudge * 10 : prefs.nudge;
       const g = sel.geo[bp];
       const d: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
       if (d[e.key]) { e.preventDefault(); commitGeo(sel.id, { ...g, x: g.x + d[e.key]![0], y: Math.max(0, g.y + d[e.key]![1]) }, "moved"); }
@@ -298,6 +311,7 @@ function EditorPage() {
             })}
           </div>
         ) : <span className="mx-auto text-sm text-muted-foreground">{page?.title}</span>}
+        {page && page.kind !== "chat" && !readOnly && <DragSettings prefs={prefs} onChange={setPrefs} />}
         <div className="flex -space-x-2">
           {room.peers.map((p) => (
             <span key={p.session} title={`${p.name}${p.session === room.session ? " (you)" : ""} · ${p.status}`}
@@ -326,7 +340,7 @@ function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <ul className="mb-4 space-y-0.5">
+          <ul className="mb-1 space-y-0.5">
             {pages.map((pg) => {
               const Icon = PAGE_ICON[pg.kind] ?? FileText;
               const here = onPage(pg.id);
@@ -353,6 +367,11 @@ function EditorPage() {
               );
             })}
           </ul>
+          {!readOnly && (
+            <button onClick={() => addPage("canvas")} className="mb-4 flex items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-sm text-muted-foreground hover:border-primary hover:text-foreground">
+              <Plus className="size-4" /> New blank page
+            </button>
+          )}
           {page?.kind === "canvas" && (
             <>
               <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Blocks</p>
@@ -375,6 +394,8 @@ function EditorPage() {
         {page?.kind === "whiteboard" ? (
           <Whiteboard key={page.id} pageId={page.id} nodes={room.nodes} userId={user.id} session={room.session} leases={room.leases}
             cursors={room.cursors} drags={room.drags} readOnly={readOnly} shared={shared}
+            projectId={projectId} prefs={prefs} locks={room.locks} canOverride={canOverride}
+            onLock={(id, mode, label) => room.setLock(id, mode, room.locks[id]?.allowed ?? [], label)}
             ops={{ op: room.op, acquire: room.acquire, release: room.release, sendDrag: room.sendDrag, sendCursor: room.sendCursor }} />
         ) : page?.kind === "chat" ? (
           <ChatPage myId={user.id} members={members} messages={chat.messages} activity={room.activity} nodes={room.nodes} theme={theme}
@@ -387,7 +408,7 @@ function EditorPage() {
               <>
                 {views.length === 0 && <p className="mb-4 text-center text-muted-foreground">Blank page — add a Navbar and a Hero from the left to get going.</p>}
                 <Canvas nodes={views} bp={bp} theme={theme} scale={scale} selected={selected} mySession={room.session} leases={room.leases}
-                  cursors={room.cursors} pageId={page.id} drags={room.drags} readOnly={readOnly} onSelect={select} onCommit={commitGeo}
+                  cursors={room.cursors} pageId={page.id} drags={room.drags} readOnly={readOnly} prefs={prefs} locks={room.locks} canOverride={canOverride} onSelect={select} onCommit={commitGeo}
                   onLiveDrag={(id, g, done) => room.sendDrag({ id, bp, ...g, done })}
                   onCursor={(x, y) => room.sendCursor(x, y, page.id)}
                   onDropBlock={(t, x, y) => addBlock(t, { x, y })} />
@@ -413,10 +434,15 @@ function EditorPage() {
                   <h2 className="text-xl text-foreground">Whiteboard</h2>
                   <p>Everyone on this page sees your notes, shapes and drawings live. Selecting something locks it for you until you click away.</p>
                   <p>Double-click a sticky, shape or text to write — several people can type in the same note at once.</p>
+                  <p><strong className="text-foreground">AI plan</strong> turns a goal into milestones and prioritized tasks on the board for everyone.</p>
+                  <p>Select an item and use the pin or lock buttons to stop others moving or changing it.</p>
                   <p>Use <strong className="text-foreground">Plan</strong> for kanban, timeline, priority matrix, SWOT and retro templates. Vote on stickies with the thumbs-up.</p>
                   <p>Shortcuts: V select, H pan, S sticky, R rectangle, O ellipse, T text, L line, A arrow, P pen, F frame. Ctrl + scroll zooms.</p>
                 </div>
               ) : sel ? (
+                <>
+                <LockControl key={`lock-${sel.id}-${room.locks[sel.id]?.mode ?? "open"}`} lock={room.locks[sel.id]} myId={user.id} isOwner={isOwner} readOnly={readOnly} members={members}
+                  onSet={(mode, allowed) => room.setLock(sel.id, mode, allowed, labelOf(sel))} />
                 <Inspector
                   key={sel.id}
                   node={sel}
@@ -437,6 +463,7 @@ function EditorPage() {
                     select(null);
                   }}
                 />
+                </>
               ) : (
                 <>
                   <ThemePanel theme={theme} readOnly={readOnly} onChange={saveTheme} />
