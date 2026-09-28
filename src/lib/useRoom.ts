@@ -24,6 +24,7 @@ export type Activity = {
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
 };
+export type NodeLock = { node_id: string; mode: "move" | "full"; allowed: string[]; locked_by: string; locked_by_name: string };
 export type Peer = { session: string; userId: string; name: string; color: string; status: "editing" | "watching" | "idle" };
 export type Cursor = { x: number; y: number; name: string; color: string; t: number; page?: string };
 export type Me = { id: string; name: string; color: string };
@@ -34,6 +35,7 @@ export function useRoom(projectId: string, me: Me | null) {
   const [session, setSession] = useState("");
   const [nodes, setNodes] = useState<Record<string, Props>>({});
   const [leases, setLeases] = useState<Record<string, Lease>>({});
+  const [locks, setLocks] = useState<Record<string, NodeLock>>({});
   const [activity, setActivity] = useState<Activity[]>([]);
   const [peers, setPeers] = useState<Peer[]>([]);
   const [cursors, setCursors] = useState<Record<string, Cursor>>({});
@@ -62,10 +64,11 @@ export function useRoom(projectId: string, me: Me | null) {
     if (!me || !session) return;
     let cancelled = false;
     (async () => {
-      const [n, l, a] = await Promise.all([
+      const [n, l, a, nl] = await Promise.all([
         supabase.from("nodes").select("id, props").eq("project_id", projectId),
         supabase.from("leases").select("*").eq("project_id", projectId),
         supabase.from("activity").select("*").eq("project_id", projectId).order("created_at", { ascending: false }).limit(60),
+        supabase.from("node_locks").select("*").eq("project_id", projectId),
       ]);
       if (cancelled) return;
       const map: Record<string, Props> = {};
@@ -78,6 +81,9 @@ export function useRoom(projectId: string, me: Me | null) {
       const lm: Record<string, Lease> = {};
       for (const row of l.data ?? []) lm[row.node_id] = row as Lease;
       setLeases(lm);
+      const lk: Record<string, NodeLock> = {};
+      for (const row of nl.data ?? []) lk[row.node_id] = row as NodeLock;
+      setLocks(lk);
       setActivity((a.data ?? []) as unknown as Activity[]);
       setLoaded(true);
     })();
@@ -96,6 +102,15 @@ export function useRoom(projectId: string, me: Me | null) {
         const row = payload.new as Lease & { project_id: string };
         if (row.project_id !== projectId) return;
         setLeases((p) => ({ ...p, [row.node_id]: row }));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "node_locks", filter: `project_id=eq.${projectId}` }, (payload) => {
+        if (payload.eventType === "DELETE") {
+          const old = payload.old as Partial<NodeLock>;
+          if (old.node_id) setLocks((p) => { const c = { ...p }; delete c[old.node_id!]; return c; });
+          return;
+        }
+        const row = payload.new as NodeLock;
+        setLocks((p) => ({ ...p, [row.node_id]: row }));
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity", filter: `project_id=eq.${projectId}` }, (payload) => {
         setActivity((p) => [payload.new as Activity, ...p].slice(0, 100));
@@ -191,9 +206,10 @@ export function useRoom(projectId: string, me: Me | null) {
         _action: action,
         _label: label,
       });
-      if (error || data === "blocked" || data === "forbidden") {
+      if (error || data === "blocked" || data === "forbidden" || data === "locked") {
         await refetchNode(nodeId);
-        if (data === "blocked") toast.warning(`${label} is being edited by someone else — your change was blocked.`);
+        if (data === "locked") toast.warning(`${label} is locked — ask the person who locked it or the owner.`);
+        else if (data === "blocked") toast.warning(`${label} is being edited by someone else — your change was blocked.`);
         else if (data === "forbidden") toast.error("You have view-only access to this project.");
         else if (error) toast.error("Couldn't save that change.");
       }
@@ -221,12 +237,22 @@ export function useRoom(projectId: string, me: Me | null) {
     [projectId, session],
   );
 
+  const setLock = useCallback(
+    async (nodeId: string, mode: NodeLock["mode"] | null, allowed: string[], label: string) => {
+      const { data, error } = await supabase.rpc("set_node_lock", { _project: projectId, _node: nodeId, _mode: mode as string, _allowed: allowed, _label: label });
+      if (error || data !== "ok") { toast.error("Only the person who locked it or the owner can change this lock."); return false; }
+      if (mode === null) setLocks((p) => { const c = { ...p }; delete c[nodeId]; return c; });
+      return true;
+    },
+    [projectId],
+  );
+
   const activeLeases: Record<string, Lease> = {};
   for (const [k, l] of Object.entries(leases)) if (new Date(l.expires_at).getTime() > now) activeLeases[k] = l;
   const liveCursors = Object.fromEntries(Object.entries(cursors).filter(([, c]) => now - c.t < 8000));
 
   return {
-    session, loaded, nodes, leases: activeLeases, activity, peers, cursors: liveCursors, drags,
+    session, loaded, nodes, leases: activeLeases, locks, setLock, activity, peers, cursors: liveCursors, drags,
     op, acquire, release, sendCursor, sendDrag, setStatus,
   };
 }
