@@ -22,6 +22,10 @@ export function ChatPage(p: {
   send: (body: string, mentions: string[], activityId: number | null) => Promise<boolean>;
   remove: (id: string) => void;
   onJump: (a: Activity) => void;
+  draft: string;
+  clearDraft: () => void;
+  wbItems: { id: string; text: string }[];
+  onOpenWb: () => void;
 }) {
   const [text, setText] = useState("");
   const [mentionQ, setMentionQ] = useState<string | null>(null);
@@ -34,6 +38,17 @@ export function ChatPage(p: {
   const myChanges = p.activity.filter((a) => a.outcome === "applied" && a.node_id).slice(0, 25);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [p.messages.length]);
+  useEffect(() => {
+    if (!p.draft) return;
+    setText(p.draft);
+    p.clearDraft();
+    requestAnimationFrame(() => { const el = taRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+  }, [p.draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  function insert(s: string) {
+    const next = text + (text && !text.endsWith(" ") ? " " : "") + s;
+    setText(next);
+    requestAnimationFrame(() => { const el = taRef.current; if (el) { el.focus(); el.setSelectionRange(next.length, next.length); } });
+  }
 
   const candidates = mentionQ === null ? [] : p.members.filter((m) => m.id !== p.myId && m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0, 6);
 
