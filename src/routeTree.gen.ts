@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as SiteProjectIdRouteImport } from './routes/site.$projectId'
 import { Route as AuthenticatedPProjectIdRouteImport } from './routes/_authenticated/p.$projectId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -34,6 +35,11 @@ const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const SiteProjectIdRoute = SiteProjectIdRouteImport.update({
+  id: '/site/$projectId',
+  path: '/site/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedPProjectIdRoute = AuthenticatedPProjectIdRouteImport.update({
   id: '/p/$projectId',
   path: '/p/$projectId',
@@ -44,12 +50,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/site/$projectId': typeof SiteProjectIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/site/$projectId': typeof SiteProjectIdRoute
   '/p/$projectId': typeof AuthenticatedPProjectIdRoute
 }
 export interface FileRoutesById {
@@ -58,19 +66,21 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
+  '/site/$projectId': typeof SiteProjectIdRoute
   '/_authenticated/p/$projectId': typeof AuthenticatedPProjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/projects' | '/p/$projectId'
+  fullPaths: '/' | '/auth' | '/projects' | '/site/$projectId' | '/p/$projectId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/projects' | '/p/$projectId'
+  to: '/' | '/auth' | '/projects' | '/site/$projectId' | '/p/$projectId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/projects'
+    | '/site/$projectId'
     | '/_authenticated/p/$projectId'
   fileRoutesById: FileRoutesById
 }
@@ -78,6 +88,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  SiteProjectIdRoute: typeof SiteProjectIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -110,6 +121,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/site/$projectId': {
+      id: '/site/$projectId'
+      path: '/site/$projectId'
+      fullPath: '/site/$projectId'
+      preLoaderRoute: typeof SiteProjectIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/p/$projectId': {
       id: '/_authenticated/p/$projectId'
       path: '/p/$projectId'
@@ -137,6 +155,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  SiteProjectIdRoute: SiteProjectIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

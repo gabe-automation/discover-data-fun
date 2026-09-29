@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft, Copy, Download, Lock, Monitor, Smartphone, Tablet, Trash2, ArrowUpToLine, Plus, FileText, PenTool, MessagesSquare, MoreHorizontal, MessageSquarePlus, Crosshair, Layers,
+  Eye, Globe, LayoutTemplate, HelpCircle, Pin, Unlock,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { useDragPrefs } from "@/lib/dragPrefs";
 import { DragSettings } from "@/components/editor/DragSettings";
 import { LockControl } from "@/components/editor/LockControl";
 import type { NodeLock } from "@/lib/useRoom";
+import { SITE_TEMPLATES, type SiteTemplate } from "@/lib/siteTemplates";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({
@@ -133,6 +135,7 @@ function EditorPage() {
 
   const chat = useChat(projectId, user.id, page?.kind === "chat", nameOf);
   const [attach, setAttach] = useState<Activity | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
 
   // ---------- canvas ----------
   const [bp, setBp] = useState<Breakpoint>("desktop");
@@ -257,6 +260,60 @@ function EditorPage() {
   }
 
   const exp = useMemo(() => generateExport(views, theme, info?.project?.name ?? "Site"), [views, theme, info?.project?.name]);
+  const singleHtml = () => exp.html
+    .replace('<link rel="stylesheet" href="styles.css">', () => `<style>${exp.css}</style>`)
+    .replace('<script src="script.js"></script>', () => `<script>${exp.js}</script>`);
+  const { data: published } = useQuery({
+    queryKey: ["published", projectId],
+    queryFn: async () => (await supabase.from("published_sites").select("updated_at").eq("project_id", projectId).maybeSingle()).data,
+  });
+  const siteUrl = typeof window !== "undefined" ? `${window.location.origin}/site/${projectId}` : "";
+  function previewSite() {
+    if (page?.kind !== "canvas") { toast.info("Open a design page to preview it."); return; }
+    const url = URL.createObjectURL(new Blob([singleHtml()], { type: "text/html" }));
+    window.open(url, "_blank");
+  }
+  async function publishSite() {
+    if (page?.kind !== "canvas") { toast.info("Open the design page you want to publish."); return; }
+    if (!views.length) { toast.info("This page is empty — add some blocks first."); return; }
+    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), published_by: user.id, updated_at: new Date().toISOString() });
+    if (error) { toast.error("Couldn't publish"); return; }
+    qc.invalidateQueries({ queryKey: ["published", projectId] });
+    toast.success("Site published", { action: { label: "Open", onClick: () => window.open(siteUrl, "_blank") } });
+  }
+  async function unpublish() {
+    await supabase.from("published_sites").delete().eq("project_id", projectId);
+    qc.invalidateQueries({ queryKey: ["published", projectId] });
+    toast.success("Site unpublished");
+  }
+  async function applyTemplate(t: SiteTemplate) {
+    if (!page || page.kind !== "canvas") return;
+    if (views.length && !window.confirm(`Add the “${t.name}” blocks below what's already on this page?`)) return;
+    const base = views.reduce((m, v) => Math.max(m, v.geo.desktop.y + v.geo.desktop.h), 0) + (views.length ? 48 : 0);
+    let order: string | null = views.reduce<string | null>((m, v) => (!m || v.order > m ? v.order : m), null);
+    const pageW = BREAKPOINTS.desktop.width;
+    for (const b of t.blocks) {
+      const def = BLOCKS[b.type];
+      const w = Math.min(b.w ?? def.w, pageW), h = b.h ?? def.h;
+      order = keyBetween(order, null);
+      await room.op(crypto.randomUUID(), {
+        type: b.type, parent: null, page: page.id, order, deleted: false,
+        "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
+        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label,
+      }, "created", `${def.name} (${t.name} template)`);
+    }
+    toast.success(`${t.name} template added`);
+  }
+  function openChat(prefill?: string) {
+    if (prefill) setChatDraft(prefill);
+    const c = pages.find((x) => x.kind === "chat");
+    if (c) setPageId(c.id); else addPage("chat");
+  }
+  const wbItems = useMemo(() => Object.entries(room.nodes).flatMap(([id, pr]) => {
+    if (val<string>(pr, "kind", "") !== "wb" || val(pr, "deleted", false)) return [];
+    const text = (shared.has(`${id}:text`) ? shared.get(`${id}:text`) : val<string>(pr, "text", "")).trim();
+    return text ? [{ id, text }] : [];
+  }), [room.nodes, shared.ver]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const areaRef = useRef<HTMLDivElement>(null);
   const [areaW, setAreaW] = useState(1000);
@@ -311,7 +368,50 @@ function EditorPage() {
             })}
           </div>
         ) : <span className="mx-auto text-sm text-muted-foreground">{page?.title}</span>}
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); else addPage("whiteboard"); }}><PenTool className="size-4" /> Whiteboard</Button>
+          <Button size="sm" variant={page?.kind === "chat" ? "secondary" : "ghost"} onClick={() => openChat()} className="relative">
+            <MessagesSquare className="size-4" /> Chat
+            {chat.unread > 0 && page?.kind !== "chat" && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
+          </Button>
+        </div>
+        {page?.kind === "canvas" && !readOnly && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><LayoutTemplate className="size-4" /> Templates</Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              {SITE_TEMPLATES.map((t) => (
+                <DropdownMenuItem key={t.id} onClick={() => applyTemplate(t)} className="flex-col items-start">
+                  <span className="font-medium">{t.name}</span>
+                  <span className="text-xs text-muted-foreground">{t.description}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         {page && page.kind !== "chat" && !readOnly && <DragSettings prefs={prefs} onChange={setPrefs} />}
+        <Button size="sm" variant="outline" onClick={previewSite}><Eye className="size-4" /> Preview</Button>
+        <Popover>
+          <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> Publish</Button></PopoverTrigger>
+          <PopoverContent align="end" className="w-80 space-y-3 text-sm">
+            <p className="font-medium">Publish this page as a public website</p>
+            {published ? (
+              <>
+                <p className="text-muted-foreground">Live since {new Date(published.updated_at).toLocaleString()}.</p>
+                <a href={siteUrl} target="_blank" rel="noreferrer" className="block truncate text-primary underline">{siteUrl}</a>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={publishSite}>Update site</Button>
+                  <Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(siteUrl); toast.success("Link copied"); }}>Copy link</Button>
+                  <Button size="sm" variant="ghost" onClick={unpublish}>Unpublish</Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-muted-foreground">Anyone with the link will be able to see the current design page.</p>
+                <Button size="sm" onClick={publishSite}>Publish now</Button>
+              </>
+            )}
+          </PopoverContent>
+        </Popover>
         <div className="flex -space-x-2">
           {room.peers.map((p) => (
             <span key={p.session} title={`${p.name}${p.session === room.session ? " (you)" : ""} · ${p.status}`}
@@ -399,7 +499,9 @@ function EditorPage() {
             ops={{ op: room.op, acquire: room.acquire, release: room.release, sendDrag: room.sendDrag, sendCursor: room.sendCursor }} />
         ) : page?.kind === "chat" ? (
           <ChatPage myId={user.id} members={members} messages={chat.messages} activity={room.activity} nodes={room.nodes} theme={theme}
-            attach={attach} setAttach={setAttach} send={chat.send} remove={chat.remove} onJump={jumpTo} />
+            attach={attach} setAttach={setAttach} send={chat.send} remove={chat.remove} onJump={jumpTo}
+            draft={chatDraft} clearDraft={() => setChatDraft("")} wbItems={wbItems}
+            onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); }} />
         ) : (
           <main ref={areaRef} className="min-w-0 flex-1 overflow-auto bg-dotgrid p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
             {!room.loaded || !page ? (
@@ -421,12 +523,47 @@ function EditorPage() {
         {page?.kind !== "chat" && (
         <aside className="flex w-80 shrink-0 flex-col border-l bg-card">
           <Tabs defaultValue="inspect" className="flex min-h-0 flex-1 flex-col">
-            <TabsList className="m-2 grid grid-cols-4">
+            <TabsList className="m-2 grid grid-cols-5">
               <TabsTrigger value="inspect">Edit</TabsTrigger>
+              <TabsTrigger value="locks" className="gap-1">Locks{Object.keys(room.locks).length > 0 && <span className="rounded-full bg-warning/40 px-1 text-[10px]">{Object.keys(room.locks).length}</span>}</TabsTrigger>
               <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="code">Code</TabsTrigger>
               <TabsTrigger value="team">Team</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="locks" className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
+              <p className="px-1 pb-2 text-xs text-muted-foreground">Who locked what. Select any block or whiteboard item, then use the lock buttons in Edit (or on the whiteboard toolbar) to pin or lock it.</p>
+              {Object.values(room.locks).length === 0 && <p className="p-3 text-sm text-muted-foreground">Nothing is locked right now.</p>}
+              <ul className="space-y-1.5">
+                {Object.values(room.locks).map((l) => {
+                  const pr = room.nodes[l.node_id];
+                  const isWb = pr && val<string>(pr, "kind", "") === "wb";
+                  const name = pr ? (isWb ? `Whiteboard ${val<string>(pr, "shape", "item")}` : BLOCKS[val<BlockType>(pr, "type", "text")]?.name ?? "Block") : "Deleted item";
+                  const txt = pr ? (shared.has(`${l.node_id}:text`) ? shared.get(`${l.node_id}:text`) : val<string>(pr, "text", "")) : "";
+                  const locker = members.find((m) => m.id === l.locked_by);
+                  const mine = canOverride(l);
+                  return (
+                    <li key={l.node_id} className="rounded-md border bg-background p-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        {l.mode === "move" ? <Pin className="size-3.5 text-warning" /> : <Lock className="size-3.5 text-destructive" />}
+                        <span className="min-w-0 flex-1 truncate font-medium">{name}{txt ? ` “${txt.slice(0, 22)}”` : ""}</span>
+                        <span className="rounded-full px-1.5 text-[10px] font-medium text-primary-foreground" style={{ background: locker?.color ?? "#78716c" }}>{l.mode === "move" ? "Pinned" : "Locked"}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        By <strong className="text-foreground">{l.locked_by === user.id ? "you" : l.locked_by_name}</strong>
+                        {l.allowed.length > 0 && <> · also allowed: {l.allowed.map(nameOf).join(", ")}</>}
+                        {mine ? " · you can edit" : l.mode === "move" ? " · you can edit text, not move" : " · you can't change it"}
+                      </p>
+                      <div className="mt-1.5 flex gap-1">
+                        {pr && <Button size="sm" variant="ghost" className="h-7" onClick={() => jumpTo({ node_id: l.node_id } as Activity)}><Crosshair className="size-3" /> Show</Button>}
+                        {(l.locked_by === user.id || isOwner) && <Button size="sm" variant="ghost" className="h-7" onClick={() => room.setLock(l.node_id, null, [], name)}><Unlock className="size-3" /> Unlock</Button>}
+                        {!mine && <Button size="sm" variant="ghost" className="h-7" onClick={() => openChat(`@${(locker?.name ?? l.locked_by_name).replace(/\s+/g, "_")} could you unlock ${name}${txt ? ` “${txt.slice(0, 22)}”` : ""}? `)}><MessageSquarePlus className="size-3" /> Ask to unlock</Button>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </TabsContent>
 
             <TabsContent value="inspect" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
               {page?.kind === "whiteboard" ? (
@@ -505,11 +642,14 @@ function EditorPage() {
                           <div className="mt-3 flex gap-2">
                             {a.node_id && <Button size="sm" variant="outline" onClick={() => jumpTo(a)}><Crosshair className="size-3.5" /> Show</Button>}
                             {!blocked && (
-                              <Button size="sm" onClick={() => {
+                              <Button size="sm" onClick={() => { setAttach(a); openChat(); }}><MessageSquarePlus className="size-3.5" /> Discuss</Button>
+                            )}
+                            {!blocked && (
+                              <Button size="sm" variant="outline" onClick={() => {
                                 setAttach(a);
-                                const c = pages.find((x) => x.kind === "chat");
-                                if (c) setPageId(c.id); else addPage("chat");
-                              }}><MessageSquarePlus className="size-3.5" /> Discuss in chat</Button>
+                                const who = members.find((m) => m.name === a.actor_name);
+                                openChat(who && who.id !== user.id ? `@${who.name.replace(/\s+/g, "_")} why did you make this change? ` : "Who made this change, and why? ");
+                              }}><HelpCircle className="size-3.5" /> Ask why</Button>
                             )}
                           </div>
                         </PopoverContent>
