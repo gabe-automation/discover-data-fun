@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, GitCommitHorizontal, Send, Trash2, X, Crosshair } from "lucide-react";
+import { AtSign, GitCommitHorizontal, Send, Trash2, X, Crosshair, PenTool } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Message } from "@/lib/useChat";
@@ -22,6 +22,10 @@ export function ChatPage(p: {
   send: (body: string, mentions: string[], activityId: number | null) => Promise<boolean>;
   remove: (id: string) => void;
   onJump: (a: Activity) => void;
+  draft: string;
+  clearDraft: () => void;
+  wbItems: { id: string; text: string }[];
+  onOpenWb: () => void;
 }) {
   const [text, setText] = useState("");
   const [mentionQ, setMentionQ] = useState<string | null>(null);
@@ -34,6 +38,17 @@ export function ChatPage(p: {
   const myChanges = p.activity.filter((a) => a.outcome === "applied" && a.node_id).slice(0, 25);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [p.messages.length]);
+  useEffect(() => {
+    if (!p.draft) return;
+    setText(p.draft);
+    p.clearDraft();
+    requestAnimationFrame(() => { const el = taRef.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+  }, [p.draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  function insert(s: string) {
+    const next = text + (text && !text.endsWith(" ") ? " " : "") + s;
+    setText(next);
+    requestAnimationFrame(() => { const el = taRef.current; if (el) { el.focus(); el.setSelectionRange(next.length, next.length); } });
+  }
 
   const candidates = mentionQ === null ? [] : p.members.filter((m) => m.id !== p.myId && m.name.toLowerCase().includes(mentionQ.toLowerCase())).slice(0, 6);
 
@@ -97,7 +112,16 @@ export function ChatPage(p: {
                     <button onClick={() => p.remove(m.id)} className="ml-auto opacity-0 group-hover:opacity-100" aria-label="Delete message"><Trash2 className="size-3.5 text-muted-foreground" /></button>
                   )}
                 </div>
-                <p className="whitespace-pre-wrap break-words text-sm">{renderBody(m.body, p.members, p.myId)}</p>
+                <p className="whitespace-pre-wrap break-words text-sm">
+                  {m.body.split(/(\[task: [^\]]+\])/g).map((seg, i) => {
+                    const t = seg.match(/^\[task: ([^\]]+)\]$/);
+                    return t ? (
+                      <button key={i} onClick={p.onOpenWb} className="mx-0.5 inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-1.5 text-accent-foreground hover:bg-accent/20">
+                        <PenTool className="size-3" /> {t[1]}
+                      </button>
+                    ) : <span key={i}>{renderBody(seg, p.members, p.myId)}</span>;
+                  })}
+                </p>
                 {m.activity_id && (
                   act ? <ChangeCard a={act} nodes={p.nodes} theme={p.theme} onJump={() => p.onJump(act)} />
                     : <p className="mt-1 text-xs text-muted-foreground">Attached change is older than the loaded history.</p>
@@ -157,6 +181,16 @@ export function ChatPage(p: {
                     <strong className="font-medium">{a.actor_name}</strong> <span className="text-muted-foreground">{a.action}</span> {a.target}
                     <span className="block text-[10px] text-muted-foreground">{new Date(a.created_at).toLocaleTimeString()}</span>
                   </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+            <Popover>
+              <PopoverTrigger asChild><Button size="sm" variant="ghost"><PenTool className="size-4" /> Whiteboard task</Button></PopoverTrigger>
+              <PopoverContent className="max-h-80 w-80 overflow-y-auto p-1" align="start">
+                <p className="px-2 py-1 text-[11px] text-muted-foreground">Point the team at a task from the whiteboard plan.</p>
+                {p.wbItems.length === 0 && <p className="p-3 text-sm text-muted-foreground">No whiteboard notes with text yet.</p>}
+                {p.wbItems.map((w) => (
+                  <button key={w.id} onClick={() => insert(`[task: ${w.text.replace(/[\[\]\n]/g, " ").slice(0, 80)}]`)} className="block w-full truncate rounded px-2 py-1.5 text-left text-sm hover:bg-secondary">{w.text}</button>
                 ))}
               </PopoverContent>
             </Popover>

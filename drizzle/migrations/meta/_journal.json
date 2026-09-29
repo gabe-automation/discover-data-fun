@@ -22,6 +22,13 @@
       "when": 1790582362428,
       "tag": "0002_node_locks",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790687431549,
+      "tag": "0003_published_sites",
+      "breakpoints": true
     }
   ]
 }
