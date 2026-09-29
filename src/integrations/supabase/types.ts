@@ -329,6 +329,38 @@ export type Database = {
         }
         Relationships: []
       }
+      published_sites: {
+        Row: {
+          html: string
+          project_id: string
+          published_by: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          html: string
+          project_id: string
+          published_by?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          html?: string
+          project_id?: string
+          published_by?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "published_sites_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seen_ops: {
         Row: {
           created_at: string
