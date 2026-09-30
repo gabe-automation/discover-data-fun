@@ -105,20 +105,19 @@ function EditorPage() {
     supabase.from("pages").insert({ project_id: projectId, kind: "canvas", title: "Home", sort: "m" }).then(() => qc.invalidateQueries({ queryKey: ["pages", projectId] }));
   }, [pagesFetched, pages.length, readOnly, myRole, projectId, qc]);
   const [pageId, setPageId] = useState<string | null>(null);
-  const page = pages.find((x) => x.id === pageId) ?? pages[0] ?? null;
+  const [chatOpen, setChatOpen] = useState(false);
+  const page = chatOpen ? { id: "team-chat", kind: "chat", title: "Team chat", sort: "" } : pages.find((x) => x.id === pageId) ?? pages[0] ?? null;
   const firstCanvas = pages.find((x) => x.kind === "canvas")?.id ?? null;
 
   async function addPage(kind: "canvas" | "whiteboard" | "chat") {
-    if (kind === "chat") {
-      const existing = pages.find((x) => x.kind === "chat");
-      if (existing) { setPageId(existing.id); return; }
-    }
+    if (kind === "chat") { setChatOpen(true); return; }
     const last = pages[pages.length - 1]?.sort ?? null;
     const title = kind === "canvas" ? `Page ${pages.filter((x) => x.kind === "canvas").length + 1}` : kind === "whiteboard" ? "Whiteboard" : "Team chat";
     const { data, error } = await supabase.from("pages").insert({ project_id: projectId, kind, title, sort: keyBetween(last, null) }).select("id").single();
     if (error) { toast.error("Couldn't add page"); return; }
     await qc.invalidateQueries({ queryKey: ["pages", projectId] });
     setPageId(data.id);
+    setChatOpen(false);
   }
   async function renamePage(pg: Page) {
     const t = window.prompt("Page name", pg.title)?.trim();
@@ -211,7 +210,7 @@ function EditorPage() {
     const y = copy ? copy.geo.desktop.y + 24 : useCursor ? sg(Math.round(at.y - h / 2)) : sg(lowest + 32);
     const extra: Record<string, unknown> = {};
     if (copy) {
-      extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label;
+      extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label; extra["href"] = copy.href;
       for (const [k, v] of Object.entries(copy.style)) extra[`s.${k}`] = v;
     }
     await room.op(
@@ -260,6 +259,16 @@ function EditorPage() {
   }
 
   const exp = useMemo(() => generateExport(views, theme, info?.project?.name ?? "Site"), [views, theme, info?.project?.name]);
+  const sitePages = useMemo(() => Object.fromEntries(pages.filter((p) => p.kind === "canvas").map((pg) => {
+    const nodes = Object.entries(room.nodes).flatMap(([id, props]) => {
+      const v = toView(id, props);
+      if (!v || (v.page ?? firstCanvas) !== pg.id) return [];
+      for (const f of ["text", "sub", "label"] as const) if (shared.has(`${id}:${f}`)) v[f] = shared.get(`${id}:${f}`);
+      return [v];
+    });
+    const out = generateExport(nodes, theme, pg.title);
+    return [pg.id, out.html.replace('<link rel="stylesheet" href="styles.css">', `<style>${out.css}</style>`).replace('<script src="script.js"></script>', `<script>${out.js}</script>`)] as const;
+  })), [pages, room.nodes, shared.ver, firstCanvas, theme]);
   const singleHtml = () => exp.html
     .replace('<link rel="stylesheet" href="styles.css">', () => `<style>${exp.css}</style>`)
     .replace('<script src="script.js"></script>', () => `<script>${exp.js}</script>`);
@@ -270,13 +279,14 @@ function EditorPage() {
   const siteUrl = typeof window !== "undefined" ? `${window.location.origin}/site/${projectId}` : "";
   function previewSite() {
     if (page?.kind !== "canvas") { toast.info("Open a design page to preview it."); return; }
-    const url = URL.createObjectURL(new Blob([singleHtml()], { type: "text/html" }));
+    const html = singleHtml().replace('</body>', `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=new URL(a.href).searchParams.get('page');var pages=${JSON.stringify(sitePages).replace(/</g, "\\u003c")};if(pages[id]){e.preventDefault();document.open();document.write(pages[id]);document.close()}})</script></body>`);
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     window.open(url, "_blank");
   }
   async function publishSite() {
     if (page?.kind !== "canvas") { toast.info("Open the design page you want to publish."); return; }
     if (!views.length) { toast.info("This page is empty — add some blocks first."); return; }
-    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), published_by: user.id, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), pages_html: sitePages, published_by: user.id, updated_at: new Date().toISOString() });
     if (error) { toast.error("Couldn't publish"); return; }
     qc.invalidateQueries({ queryKey: ["published", projectId] });
     toast.success("Site published", { action: { label: "Open", onClick: () => window.open(siteUrl, "_blank") } });
@@ -299,7 +309,7 @@ function EditorPage() {
       return room.op(crypto.randomUUID(), {
         type: b.type, parent: null, page: page.id, order, deleted: false,
         "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
-        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label,
+        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "",
       }, "created", `${def.name} (${t.name} template)`);
     });
     await Promise.all(jobs);
@@ -317,8 +327,7 @@ function EditorPage() {
   }, [room.loaded, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   function openChat(prefill?: string) {
     if (prefill) setChatDraft(prefill);
-    const c = pages.find((x) => x.kind === "chat");
-    if (c) setPageId(c.id); else addPage("chat");
+    setChatOpen(true);
   }
   const wbItems = useMemo(() => Object.entries(room.nodes).flatMap(([id, pr]) => {
     if (val<string>(pr, "kind", "") !== "wb" || val(pr, "deleted", false)) return [];
@@ -362,9 +371,14 @@ function EditorPage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card px-3 [&>*]:shrink-0">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 [&>*]:shrink-0">
         <Button variant="ghost" size="icon" asChild><Link to="/projects" aria-label="Back to projects"><ArrowLeft /></Link></Button>
         <span className="max-w-40 truncate font-display text-lg">{info?.project?.name ?? "…"}</span>
+        <Button size="sm" variant={chatOpen ? "secondary" : "outline"} onClick={() => openChat()} className="relative ml-auto" aria-label="Open team chat">
+          <MessagesSquare className="size-4" /> <span className="hidden sm:inline">Chat</span>
+          {chat.unread > 0 && !chatOpen && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
+        </Button>
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto [&>*]:shrink-0">
         {readOnly && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
         {page?.kind === "canvas" ? (
           <div className="mx-auto flex rounded-lg border bg-background p-0.5">
@@ -380,11 +394,7 @@ function EditorPage() {
           </div>
         ) : <span className="mx-auto text-sm text-muted-foreground">{page?.title}</span>}
         <div className="flex items-center gap-1">
-          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden lg:inline">Whiteboard</span></Button>
-          <Button size="sm" variant={page?.kind === "chat" ? "secondary" : "ghost"} onClick={() => openChat()} className="relative">
-            <MessagesSquare className="size-4" /> <span className="hidden lg:inline">Chat</span>
-            {chat.unread > 0 && page?.kind !== "chat" && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
-          </Button>
+          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden lg:inline">Whiteboard</span></Button>
         </div>
         {page?.kind === "canvas" && !readOnly && (
           <DropdownMenu>
@@ -433,6 +443,7 @@ function EditorPage() {
             </span>
           ))}
         </div>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -457,7 +468,7 @@ function EditorPage() {
               const here = onPage(pg.id);
               return (
                 <li key={pg.id} className={`group flex items-center rounded-md ${page?.id === pg.id ? "bg-secondary font-medium" : "hover:bg-secondary/60"}`}>
-                  <button onClick={() => setPageId(pg.id)} onDoubleClick={() => !readOnly && renamePage(pg)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm">
+                  <button onClick={() => { setPageId(pg.id); setChatOpen(false); }} onDoubleClick={() => !readOnly && renamePage(pg)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm">
                     <Icon className="size-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">{pg.title}</span>
                     {pg.kind === "chat" && chat.unread > 0 && page?.id !== pg.id && (
@@ -478,6 +489,7 @@ function EditorPage() {
               );
             })}
           </ul>
+          <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => openChat()} className="mb-3 justify-start"><MessagesSquare className="size-4" /> Team chat</Button>
           {!readOnly && (
             <button onClick={() => addPage("canvas")} className="mb-4 flex items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-sm text-muted-foreground hover:border-primary hover:text-foreground">
               <Plus className="size-4" /> New blank page
@@ -598,7 +610,8 @@ function EditorPage() {
                   shared={shared}
                   lockedBy={selLockedBy}
                   readOnly={readOnly}
-                  onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
+                   onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
+                   onLink={(v) => room.op(sel.id, { href: v }, "linked", labelOf(sel))}
                   onStyle={(k, v) => room.op(sel.id, { [`s.${k}`]: v ?? null }, "styled", labelOf(sel))}
                   onGeo={(g) => commitGeo(sel.id, g, "resized")}
                   onFront={() => {
@@ -745,6 +758,8 @@ function Inspector(props: {
   lockedBy?: string | undefined;
   readOnly: boolean;
   onEdit: (f: "text" | "sub" | "label", v: string) => void;
+  onLink: (v: string) => void;
+  pages: never[];
   onStyle: (k: keyof BlockStyle, v: unknown) => void;
   onGeo: (g: Geo) => void;
   onFront: () => void;
