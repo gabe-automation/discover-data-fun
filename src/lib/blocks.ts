@@ -44,7 +44,7 @@ export function safeHref(raw?: string): string {
   if (/^https?:\/\//i.test(value)) {
     try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? value : ""; } catch { return ""; }
   }
-  if (/^(\/[^/]|#[a-zA-Z0-9_-]|\?page=[0-9a-f-]{36}$)/i.test(value) && !/[\s"'<>]/.test(value)) return value;
+  if (/^\?page=[0-9a-f-]{36}$/i.test(value) || (/^(\/[^/]|#[a-zA-Z0-9_-])/i.test(value) && !/[\s"'<>]/.test(value))) return value;
   return "";
 }
 
@@ -77,7 +77,7 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
       return `<blockquote class="wc-quote"><p>“${t}”</p><footer>— ${s}</footer></blockquote>`;
     case "login":
     case "register":
-      return `<section class="wc-form" id="contact" aria-labelledby="${id}-t"><h3 id="${id}-t">${t}</h3><p>${type === "register" ? "Join us to get started." : "Already have an account?"}</p>${action(l)}</section>`;
+      return `<section class="wc-form" id="${type === "register" ? "signup" : "signin"}" aria-labelledby="${id}-t"><h3 id="${id}-t">${t}</h3><p>${type === "register" ? "Join us to get started." : "Already have an account?"}</p>${action(l)}</section>`;
     case "divider":
       return `<hr class="wc-divider">`;
     case "footer":
@@ -128,7 +128,7 @@ export const BLOCK_CSS = `
 .wc-form h3{margin:0 0 4px;font:600 22px Georgia,serif;}
 .wc-form label{display:flex;flex-direction:column;gap:4px;font-size:13px;}
 .wc-form input{height:38px;border-radius:8px;border:1px solid color-mix(in srgb,var(--wc-ink) 20%,transparent);padding:0 10px;background:white;font:inherit;}
-.wc-form p{font:15px/1.5 system-ui,sans-serif;opacity:.7}.wc-form .wc-btn{height:44px;margin-top:auto;}
+.wc-form p{font:15px/1.5 system-ui,sans-serif;opacity:.7}.wc-form .wc-btn{height:44px;margin-top:12px;}
 .wc-divider{border:0;border-top:1px solid color-mix(in srgb,var(--wc-ink) 18%,transparent);margin:11px 0;}
 .wc-footer{height:100%;display:flex;justify-content:space-between;align-items:center;padding:0 40px;font:14px system-ui,sans-serif;opacity:.75;border-top:1px solid color-mix(in srgb,var(--wc-ink) 12%,transparent);}
 `;
