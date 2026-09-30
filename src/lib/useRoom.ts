@@ -48,7 +48,7 @@ export function useRoom(projectId: string, me: Me | null) {
 
   useEffect(() => {
     setSession(crypto.randomUUID());
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    const t = setInterval(() => setNow(Date.now()), 3000);
     return () => clearInterval(t);
   }, []);
 

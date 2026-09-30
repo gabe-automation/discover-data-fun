@@ -292,16 +292,17 @@ function EditorPage() {
     const base = views.reduce((m, v) => Math.max(m, v.geo.desktop.y + v.geo.desktop.h), 0) + (views.length ? 48 : 0);
     let order: string | null = views.reduce<string | null>((m, v) => (!m || v.order > m ? v.order : m), null);
     const pageW = BREAKPOINTS.desktop.width;
-    for (const b of t.blocks) {
+    const jobs = t.blocks.map((b) => {
       const def = BLOCKS[b.type];
       const w = Math.min(b.w ?? def.w, pageW), h = b.h ?? def.h;
       order = keyBetween(order, null);
-      await room.op(crypto.randomUUID(), {
+      return room.op(crypto.randomUUID(), {
         type: b.type, parent: null, page: page.id, order, deleted: false,
         "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
         text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label,
       }, "created", `${def.name} (${t.name} template)`);
-    }
+    });
+    await Promise.all(jobs);
     toast.success(`${t.name} template added`);
   }
   function openChat(prefill?: string) {
@@ -351,9 +352,9 @@ function EditorPage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-3">
+      <header className="flex h-14 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card px-3 [&>*]:shrink-0">
         <Button variant="ghost" size="icon" asChild><Link to="/projects" aria-label="Back to projects"><ArrowLeft /></Link></Button>
-        <span className="font-display text-lg">{info?.project?.name ?? "…"}</span>
+        <span className="max-w-40 truncate font-display text-lg">{info?.project?.name ?? "…"}</span>
         {readOnly && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
         {page?.kind === "canvas" ? (
           <div className="mx-auto flex rounded-lg border bg-background p-0.5">
@@ -369,15 +370,15 @@ function EditorPage() {
           </div>
         ) : <span className="mx-auto text-sm text-muted-foreground">{page?.title}</span>}
         <div className="flex items-center gap-1">
-          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); else addPage("whiteboard"); }}><PenTool className="size-4" /> Whiteboard</Button>
+          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden lg:inline">Whiteboard</span></Button>
           <Button size="sm" variant={page?.kind === "chat" ? "secondary" : "ghost"} onClick={() => openChat()} className="relative">
-            <MessagesSquare className="size-4" /> Chat
+            <MessagesSquare className="size-4" /> <span className="hidden lg:inline">Chat</span>
             {chat.unread > 0 && page?.kind !== "chat" && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
           </Button>
         </div>
         {page?.kind === "canvas" && !readOnly && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><LayoutTemplate className="size-4" /> Templates</Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><LayoutTemplate className="size-4" /> <span className="hidden lg:inline">Templates</span></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
               {SITE_TEMPLATES.map((t) => (
                 <DropdownMenuItem key={t.id} onClick={() => applyTemplate(t)} className="flex-col items-start">
@@ -389,9 +390,9 @@ function EditorPage() {
           </DropdownMenu>
         )}
         {page && page.kind !== "chat" && !readOnly && <DragSettings prefs={prefs} onChange={setPrefs} />}
-        <Button size="sm" variant="outline" onClick={previewSite}><Eye className="size-4" /> Preview</Button>
+        <Button size="sm" variant="outline" onClick={previewSite} title="Preview website"><Eye className="size-4" /> <span className="hidden lg:inline">Preview</span></Button>
         <Popover>
-          <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> Publish</Button></PopoverTrigger>
+          <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> <span className="hidden lg:inline">Publish</span></Button></PopoverTrigger>
           <PopoverContent align="end" className="w-80 space-y-3 text-sm">
             <p className="font-medium">Publish this page as a public website</p>
             {published ? (
