@@ -44,7 +44,7 @@ export function safeHref(raw?: string): string {
   if (/^https?:\/\//i.test(value)) {
     try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? value : ""; } catch { return ""; }
   }
-  if (/^(\/[^/]|#[a-zA-Z0-9_-])/i.test(value) && !/[\s"'<>]/.test(value)) return value;
+  if (/^(\/[^/]|#[a-zA-Z0-9_-]|\?page=[0-9a-f-]{36}$)/i.test(value) && !/[\s"'<>]/.test(value)) return value;
   return "";
 }
 
@@ -58,7 +58,7 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
     case "hero":
       return `<section class="wc-hero"><h1>${t}</h1><p>${s}</p>${action(l)}</section>`;
     case "heading":
-      return `<h2 class="wc-heading">${t}</h2>`;
+      return `<h2 class="wc-heading" id="work">${t}</h2>`;
     case "text":
       return `<p class="wc-text">${t}</p>`;
     case "button":
@@ -67,7 +67,7 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
       return `<figure class="wc-image"><div class="wc-image-art" role="img" aria-label="${t}"></div><figcaption>${t}</figcaption></figure>`;
     case "cards": {
       const titles = split(c.text), subs = split(c.sub);
-      return `<section class="wc-cards">${titles.map((x, i) => `<article class="wc-card"><h3>${esc(x)}</h3><p>${esc(subs[i] ?? "")}</p></article>`).join("")}</section>`;
+      return `<section class="wc-cards" id="features">${titles.map((x, i) => `<article class="wc-card"><h3>${esc(x)}</h3><p>${esc(subs[i] ?? "")}</p></article>`).join("")}</section>`;
     }
     case "pricing": {
       const titles = split(c.text), prices = split(c.sub);
@@ -77,7 +77,7 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
       return `<blockquote class="wc-quote"><p>“${t}”</p><footer>— ${s}</footer></blockquote>`;
     case "login":
     case "register":
-      return `<section class="wc-form" aria-labelledby="${id}-t"><h3 id="${id}-t">${t}</h3><p>${type === "register" ? "Join us to get started." : "Already have an account?"}</p>${action(l)}</section>`;
+      return `<section class="wc-form" id="contact" aria-labelledby="${id}-t"><h3 id="${id}-t">${t}</h3><p>${type === "register" ? "Join us to get started." : "Already have an account?"}</p>${action(l)}</section>`;
     case "divider":
       return `<hr class="wc-divider">`;
     case "footer":
