@@ -77,8 +77,8 @@ const shortId = (id: string) => "n" + id.replace(/-/g, "").slice(0, 8);
 
 export function generateExport(nodes: NodeView[], theme: Theme, title: string) {
   const sorted = [...nodes].sort((a, b) => a.geo.desktop.y - b.geo.desktop.y || a.geo.desktop.x - b.geo.desktop.x);
-  const body = sorted
-    .map((n) => `    <div class="wc-el" id="${shortId(n.id)}">\n      ${blockHtml(n.type, n, shortId(n.id))}\n    </div>`)
+   const body = sorted
+     .map((n) => `    <div class="wc-el" id="${n.type === "cards" ? "features" : n.type === "register" ? "contact" : n.type === "heading" ? "work" : shortId(n.id)}">\n      ${blockHtml(n.type, n, shortId(n.id))}\n    </div>`)
     .join("\n");
   const html = `<!doctype html>
 <html lang="en">
