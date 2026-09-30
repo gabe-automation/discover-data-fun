@@ -332,6 +332,7 @@ export type Database = {
       published_sites: {
         Row: {
           html: string
+          pages_html: Json
           project_id: string
           published_by: string | null
           title: string
@@ -339,6 +340,7 @@ export type Database = {
         }
         Insert: {
           html: string
+          pages_html?: Json
           project_id: string
           published_by?: string | null
           title?: string
@@ -346,6 +348,7 @@ export type Database = {
         }
         Update: {
           html?: string
+          pages_html?: Json
           project_id?: string
           published_by?: string | null
           title?: string

@@ -29,6 +29,13 @@
       "when": 1790687431549,
       "tag": "0003_published_sites",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790735883108,
+      "tag": "0004_published_site_pages",
+      "breakpoints": true
     }
   ]
 }
