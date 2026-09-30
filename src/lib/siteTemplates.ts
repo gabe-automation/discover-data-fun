@@ -1,9 +1,9 @@
 import { BLOCKS, type BlockType } from "./blocks";
 
-export type TplBlock = { type: BlockType; y: number; text?: string; sub?: string; label?: string; w?: number; h?: number; x?: number };
+export type TplBlock = { type: BlockType; y: number; text?: string; sub?: string; label?: string; href?: string; w?: number; h?: number; x?: number };
 export type SiteTemplate = { id: string; name: string; description: string; blocks: TplBlock[] };
 
-const stack = (items: Omit<TplBlock, "y">[], gap = 32): TplBlock[] => {
+const stack = (items: Omit<TplBlock, "y">[], gap = 0): TplBlock[] => {
   let y = 0;
   return items.map((b) => {
     const h = b.h ?? BLOCKS[b.type].h;
@@ -17,45 +17,46 @@ export const SITE_TEMPLATES: SiteTemplate[] = [
   {
     id: "landing", name: "Product landing", description: "Hero, features, pricing and a testimonial.",
     blocks: stack([
-      { type: "navbar", text: "Launchpad", sub: "Features · Pricing · Docs", label: "Sign up" },
-      { type: "hero", text: "Ship your idea this week", sub: "Everything a small team needs to launch, in one calm place.", label: "Start free" },
-      { type: "cards", text: "Plan|Build|Launch", sub: "Turn goals into tasks.|Design together live.|Publish in one click." },
-      { type: "pricing", text: "Solo|Team|Company", sub: "$0|$29|$99", label: "Choose" },
-      { type: "testimonial", text: "We launched two weeks early.", sub: "Priya N., Product lead" },
-      { type: "footer", text: "© 2026 Launchpad", sub: "Twitter · Blog · Email" },
+      { type: "navbar", text: "COMMON GROUND", sub: "The platform · Our approach · Plans", label: "Explore", href: "#features", h: 84 },
+      { type: "hero", text: "Make room for better work.", sub: "A quieter way to bring your people, projects and ideas together.", label: "Explore the platform", href: "#features", h: 520 },
+      { type: "heading", text: "Everything, in its right place.", h: 140 },
+      { type: "cards", text: "01 / Find your focus|02 / Work together|03 / Move forward", sub: "One clear space for what matters.|Good ideas deserve good company.|From the first sketch to the finish line.", h: 330 },
+      { type: "testimonial", text: "Finally, a space that feels like ours.", sub: "The people behind the work", h: 245 },
+      { type: "footer", text: "COMMON GROUND / 2026", sub: "Built for people who make things together.", h: 130 },
     ]),
   },
   {
     id: "portfolio", name: "Portfolio", description: "Personal intro, work samples and contact.",
     blocks: stack([
-      { type: "navbar", text: "Alex Rivera", sub: "Work · About · Contact", label: "Hire me" },
-      { type: "hero", text: "Designer who codes", sub: "I build thoughtful interfaces for small brands.", label: "See projects" },
-      { type: "heading", text: "Selected work" },
-      { type: "image", text: "Project cover", w: 1080, h: 420 },
-      { type: "cards", text: "Brand refresh|Mobile app|Marketing site", sub: "Oak & Iron, 2026|Fieldnote, 2025|Harbor Co, 2025" },
-      { type: "footer", text: "© 2026 Alex Rivera", sub: "Dribbble · GitHub · Email" },
+      { type: "navbar", text: "ALEX RIVERA / DESIGN", sub: "Selected work · About · Contact", label: "View work", href: "#work", h: 84 },
+      { type: "hero", text: "I make digital feel human.", sub: "Independent designer and maker creating thoughtful experiences for ambitious teams.", label: "View selected work", href: "#work", h: 480 },
+      { type: "heading", text: "Selected work / 2024—26", h: 140 },
+      { type: "cards", text: "01 / Fieldnotes|02 / Open House|03 / Goodform", sub: "Identity & digital experience|A fresh way to find home|Tools for everyday making", h: 340 },
+      { type: "testimonial", text: "The best projects begin with a good conversation.", sub: "Currently available for select collaborations", h: 220 },
+      { type: "footer", text: "ALEX RIVERA / 2026", sub: "Made with care. Get in touch above.", h: 120 },
     ]),
   },
   {
-    id: "saas", name: "App with sign-in", description: "Landing with login and register forms.",
-    blocks: [
-      ...stack([
-        { type: "navbar", text: "Tasklight", sub: "Product · Pricing", label: "Log in" },
-        { type: "hero", text: "Your team's tasks, finally clear", sub: "Plan, assign and track in one place.", label: "Get started" },
-      ]),
-      { type: "login", y: 516, x: 180 },
-      { type: "register", y: 516, x: 640 },
-      { type: "footer", y: 912, text: "© 2026 Tasklight", sub: "Status · Privacy · Terms" },
-    ],
+    id: "saas", name: "App launch", description: "An editorial product page with clear sign-in actions.",
+    blocks: stack([
+      { type: "navbar", text: "TASKLIGHT", sub: "Overview · How it works · Plans", label: "Sign in", href: "#signin", h: 84 },
+      { type: "hero", text: "A little more clarity, every day.", sub: "Your team's work, in one beautifully simple place. Spend less time organizing and more time making.", label: "Create an account", href: "#signup", h: 530 },
+      { type: "heading", text: "Work that just flows.", h: 140 },
+      { type: "cards", text: "See the whole picture|Keep everyone in sync|Make progress visible", sub: "One home for every project.|The right people, always in the loop.|Small steps that add up to big things.", h: 330 },
+      { type: "register", text: "Ready when you are.", label: "Sign up", h: 220, w: 1080 },
+      { type: "login", text: "Welcome back.", label: "Sign in", h: 220, w: 1080 },
+      { type: "footer", text: "TASKLIGHT / 2026", sub: "A better way to work together.", h: 130 },
+    ]),
   },
   {
     id: "event", name: "Event page", description: "Announcement, schedule and RSVP button.",
     blocks: stack([
-      { type: "navbar", text: "DevDays 2026", sub: "Schedule · Speakers · Venue", label: "RSVP" },
-      { type: "hero", text: "Two days of hands-on building", sub: "Taipei · October 14–15", label: "Get a ticket" },
-      { type: "cards", text: "Day 1: Workshops|Day 2: Talks|Evening: Demo night", sub: "Bring a laptop.|12 speakers.|Show what you made." },
-      { type: "button", label: "Reserve my seat", x: 510 },
-      { type: "footer", text: "© 2026 DevDays", sub: "Code of conduct · Contact" },
+      { type: "navbar", text: "ASSEMBLY / 2026", sub: "The gathering · The program · The place", label: "See program", href: "#features", h: 84 },
+      { type: "hero", text: "For the things we make together.", sub: "Two days of conversation, discovery and new perspectives. Add your date and venue here.", label: "Explore the program", href: "#features", h: 530 },
+      { type: "heading", text: "A gathering worth showing up for.", h: 140 },
+      { type: "cards", text: "01 / Connect|02 / Discover|03 / Make", sub: "Meet the people behind the ideas.|Hear fresh perspectives.|Leave with something new.", h: 330 },
+      { type: "testimonial", text: "Come curious. Leave inspired.", sub: "Your next chapter starts here", h: 220 },
+      { type: "footer", text: "ASSEMBLY / 2026", sub: "Details and tickets coming soon.", h: 130 },
     ]),
   },
 ];

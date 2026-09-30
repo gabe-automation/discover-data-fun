@@ -19,7 +19,7 @@ import { Whiteboard } from "@/components/editor/Whiteboard";
 import { ChatPage } from "@/components/editor/ChatPage";
 import { ActivityPreview } from "@/components/editor/ActivityPreview";
 import { CollabTextarea } from "@/components/editor/CollabTextarea";
-import { BLOCKS, BREAKPOINTS, DEFAULT_THEME, type BlockStyle, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
+import { BLOCKS, BREAKPOINTS, DEFAULT_THEME, safeHref, type BlockStyle, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
 import { generateExport, toView, type Geo, type NodeView } from "@/lib/model";
 import { keyBetween, val } from "@/lib/crdt";
 import { useRoom, type Activity, type Me } from "@/lib/useRoom";
@@ -38,6 +38,8 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
       { name: "description", content: "Edit your website live with your team in WebCraft." },
       { property: "og:title", content: "Editor — WebCraft" },
       { property: "og:description", content: "Edit your website live with your team in WebCraft." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: EditorPage,
@@ -105,20 +107,19 @@ function EditorPage() {
     supabase.from("pages").insert({ project_id: projectId, kind: "canvas", title: "Home", sort: "m" }).then(() => qc.invalidateQueries({ queryKey: ["pages", projectId] }));
   }, [pagesFetched, pages.length, readOnly, myRole, projectId, qc]);
   const [pageId, setPageId] = useState<string | null>(null);
-  const page = pages.find((x) => x.id === pageId) ?? pages[0] ?? null;
+  const [chatOpen, setChatOpen] = useState(false);
+  const page = chatOpen ? { id: "team-chat", kind: "chat", title: "Team chat", sort: "" } : pages.find((x) => x.id === pageId) ?? pages[0] ?? null;
   const firstCanvas = pages.find((x) => x.kind === "canvas")?.id ?? null;
 
   async function addPage(kind: "canvas" | "whiteboard" | "chat") {
-    if (kind === "chat") {
-      const existing = pages.find((x) => x.kind === "chat");
-      if (existing) { setPageId(existing.id); return; }
-    }
+    if (kind === "chat") { setChatOpen(true); return; }
     const last = pages[pages.length - 1]?.sort ?? null;
     const title = kind === "canvas" ? `Page ${pages.filter((x) => x.kind === "canvas").length + 1}` : kind === "whiteboard" ? "Whiteboard" : "Team chat";
     const { data, error } = await supabase.from("pages").insert({ project_id: projectId, kind, title, sort: keyBetween(last, null) }).select("id").single();
     if (error) { toast.error("Couldn't add page"); return; }
     await qc.invalidateQueries({ queryKey: ["pages", projectId] });
     setPageId(data.id);
+    setChatOpen(false);
   }
   async function renamePage(pg: Page) {
     const t = window.prompt("Page name", pg.title)?.trim();
@@ -211,7 +212,7 @@ function EditorPage() {
     const y = copy ? copy.geo.desktop.y + 24 : useCursor ? sg(Math.round(at.y - h / 2)) : sg(lowest + 32);
     const extra: Record<string, unknown> = {};
     if (copy) {
-      extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label;
+      extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label; extra["href"] = copy.href;
       for (const [k, v] of Object.entries(copy.style)) extra[`s.${k}`] = v;
     }
     await room.op(
@@ -260,6 +261,16 @@ function EditorPage() {
   }
 
   const exp = useMemo(() => generateExport(views, theme, info?.project?.name ?? "Site"), [views, theme, info?.project?.name]);
+  const sitePages = useMemo(() => Object.fromEntries(pages.filter((p) => p.kind === "canvas").map((pg) => {
+    const nodes = Object.entries(room.nodes).flatMap(([id, props]) => {
+      const v = toView(id, props);
+      if (!v || (v.page ?? firstCanvas) !== pg.id) return [];
+      for (const f of ["text", "sub", "label"] as const) if (shared.has(`${id}:${f}`)) v[f] = shared.get(`${id}:${f}`);
+      return [v];
+    });
+    const out = generateExport(nodes, theme, pg.title);
+    return [pg.id, out.html.replace('<link rel="stylesheet" href="styles.css">', `<style>${out.css}</style>`).replace('<script src="script.js"></script>', `<script>${out.js}</script>`)] as const;
+  })), [pages, room.nodes, shared.ver, firstCanvas, theme]);
   const singleHtml = () => exp.html
     .replace('<link rel="stylesheet" href="styles.css">', () => `<style>${exp.css}</style>`)
     .replace('<script src="script.js"></script>', () => `<script>${exp.js}</script>`);
@@ -270,13 +281,16 @@ function EditorPage() {
   const siteUrl = typeof window !== "undefined" ? `${window.location.origin}/site/${projectId}` : "";
   function previewSite() {
     if (page?.kind !== "canvas") { toast.info("Open a design page to preview it."); return; }
-    const url = URL.createObjectURL(new Blob([singleHtml()], { type: "text/html" }));
+    const data = JSON.stringify(sitePages).replace(/</g, "\\u003c");
+    const handler = `<script>var pages=${data};function navigatePage(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=a.getAttribute('href').slice(6);if(pages[id]){e.preventDefault();document.open();document.write(pages[id]);document.close();document.addEventListener('click',navigatePage)}}document.addEventListener('click',navigatePage)</script>`;
+    const html = singleHtml().replace('</body>', `${handler}</body>`);
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     window.open(url, "_blank");
   }
   async function publishSite() {
     if (page?.kind !== "canvas") { toast.info("Open the design page you want to publish."); return; }
     if (!views.length) { toast.info("This page is empty — add some blocks first."); return; }
-    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), published_by: user.id, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), pages_html: sitePages as never, published_by: user.id, updated_at: new Date().toISOString() });
     if (error) { toast.error("Couldn't publish"); return; }
     qc.invalidateQueries({ queryKey: ["published", projectId] });
     toast.success("Site published", { action: { label: "Open", onClick: () => window.open(siteUrl, "_blank") } });
@@ -299,11 +313,12 @@ function EditorPage() {
       return room.op(crypto.randomUUID(), {
         type: b.type, parent: null, page: page.id, order, deleted: false,
         "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
-        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label,
+        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "",
       }, "created", `${def.name} (${t.name} template)`);
     });
-    await Promise.all(jobs);
-    toast.success(`${t.name} template added`);
+    const results = await Promise.all(jobs);
+    if (results.some((r) => r !== "applied" && r !== "duplicate")) toast.error("Some template blocks could not be added");
+    else toast.success(`${t.name} template added`);
   }
   // Apply a template picked on the projects screen, once the first page is ready.
   useEffect(() => {
@@ -317,8 +332,7 @@ function EditorPage() {
   }, [room.loaded, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   function openChat(prefill?: string) {
     if (prefill) setChatDraft(prefill);
-    const c = pages.find((x) => x.kind === "chat");
-    if (c) setPageId(c.id); else addPage("chat");
+    setChatOpen(true);
   }
   const wbItems = useMemo(() => Object.entries(room.nodes).flatMap(([id, pr]) => {
     if (val<string>(pr, "kind", "") !== "wb" || val(pr, "deleted", false)) return [];
@@ -342,7 +356,7 @@ function EditorPage() {
     const pr = room.nodes[a.node_id];
     if (!pr) { toast.info("That item no longer exists."); return; }
     const target = val<string | null>(pr, "page", null) ?? firstCanvas;
-    if (target) setPageId(target);
+    if (target) { setPageId(target); setChatOpen(false); }
     if (val<string>(pr, "kind", "") !== "wb") setTimeout(() => select(a.node_id), 50);
   }
 
@@ -362,9 +376,14 @@ function EditorPage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-2 overflow-x-auto border-b bg-card px-3 [&>*]:shrink-0">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 [&>*]:shrink-0">
         <Button variant="ghost" size="icon" asChild><Link to="/projects" aria-label="Back to projects"><ArrowLeft /></Link></Button>
         <span className="max-w-40 truncate font-display text-lg">{info?.project?.name ?? "…"}</span>
+        <Button size="sm" variant={chatOpen ? "secondary" : "outline"} onClick={() => openChat()} className="relative ml-auto" aria-label="Open team chat">
+          <MessagesSquare className="size-4" /> <span className="hidden sm:inline">Chat</span>
+          {chat.unread > 0 && !chatOpen && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
+        </Button>
+        <div className="flex min-w-0 items-center gap-2 overflow-x-auto [&>*]:shrink-0">
         {readOnly && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
         {page?.kind === "canvas" ? (
           <div className="mx-auto flex rounded-lg border bg-background p-0.5">
@@ -380,11 +399,7 @@ function EditorPage() {
           </div>
         ) : <span className="mx-auto text-sm text-muted-foreground">{page?.title}</span>}
         <div className="flex items-center gap-1">
-          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden lg:inline">Whiteboard</span></Button>
-          <Button size="sm" variant={page?.kind === "chat" ? "secondary" : "ghost"} onClick={() => openChat()} className="relative">
-            <MessagesSquare className="size-4" /> <span className="hidden lg:inline">Chat</span>
-            {chat.unread > 0 && page?.kind !== "chat" && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
-          </Button>
+          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden lg:inline">Whiteboard</span></Button>
         </div>
         {page?.kind === "canvas" && !readOnly && (
           <DropdownMenu>
@@ -404,7 +419,7 @@ function EditorPage() {
         <Popover>
           <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> <span className="hidden lg:inline">Publish</span></Button></PopoverTrigger>
           <PopoverContent align="end" className="w-80 space-y-3 text-sm">
-            <p className="font-medium">Publish this page as a public website</p>
+            <p className="font-medium">Publish your website</p>
             {published ? (
               <>
                 <p className="text-muted-foreground">Live since {new Date(published.updated_at).toLocaleString()}.</p>
@@ -417,7 +432,7 @@ function EditorPage() {
               </>
             ) : (
               <>
-                <p className="text-muted-foreground">Anyone with the link will be able to see the current design page.</p>
+                <p className="text-muted-foreground">Anyone with the link can see this page and linked project pages.</p>
                 <Button size="sm" onClick={publishSite}>Publish now</Button>
               </>
             )}
@@ -432,6 +447,7 @@ function EditorPage() {
               <span className={`absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card ${p.status === "editing" ? "bg-success" : p.status === "idle" ? "bg-muted-foreground" : "bg-warning"}`} />
             </span>
           ))}
+        </div>
         </div>
       </header>
 
@@ -457,7 +473,7 @@ function EditorPage() {
               const here = onPage(pg.id);
               return (
                 <li key={pg.id} className={`group flex items-center rounded-md ${page?.id === pg.id ? "bg-secondary font-medium" : "hover:bg-secondary/60"}`}>
-                  <button onClick={() => setPageId(pg.id)} onDoubleClick={() => !readOnly && renamePage(pg)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm">
+                  <button onClick={() => { setPageId(pg.id); setChatOpen(false); }} onDoubleClick={() => !readOnly && renamePage(pg)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm">
                     <Icon className="size-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">{pg.title}</span>
                     {pg.kind === "chat" && chat.unread > 0 && page?.id !== pg.id && (
@@ -478,6 +494,7 @@ function EditorPage() {
               );
             })}
           </ul>
+          <Button variant={chatOpen ? "secondary" : "ghost"} size="sm" onClick={() => openChat()} className="mb-3 justify-start"><MessagesSquare className="size-4" /> Team chat</Button>
           {!readOnly && (
             <button onClick={() => addPage("canvas")} className="mb-4 flex items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-sm text-muted-foreground hover:border-primary hover:text-foreground">
               <Plus className="size-4" /> New blank page
@@ -512,7 +529,7 @@ function EditorPage() {
           <ChatPage myId={user.id} members={members} messages={chat.messages} activity={room.activity} nodes={room.nodes} theme={theme}
             attach={attach} setAttach={setAttach} send={chat.send} remove={chat.remove} onJump={jumpTo}
             draft={chatDraft} clearDraft={() => setChatDraft("")} wbItems={wbItems}
-            onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); }} />
+            onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } }} />
         ) : (
           <main ref={areaRef} className="min-w-0 flex-1 overflow-auto bg-dotgrid p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
             {!room.loaded || !page ? (
@@ -598,7 +615,9 @@ function EditorPage() {
                   shared={shared}
                   lockedBy={selLockedBy}
                   readOnly={readOnly}
-                  onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
+                   onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
+                    onLink={(v) => { if (v && !safeHref(v)) { toast.error("Use a valid website, payment, email, or project page link"); return; } room.op(sel.id, { href: v }, "linked", labelOf(sel)); }}
+                    pages={pages.filter((p) => p.kind === "canvas")}
                   onStyle={(k, v) => room.op(sel.id, { [`s.${k}`]: v ?? null }, "styled", labelOf(sel))}
                   onGeo={(g) => commitGeo(sel.id, g, "resized")}
                   onFront={() => {
@@ -673,7 +692,7 @@ function EditorPage() {
             </TabsContent>
 
             <TabsContent value="code" className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-              <CodeView exp={exp} name={`${info?.project?.name ?? "site"}-${page?.title ?? ""}`} />
+                <CodeView exp={exp} pages={sitePages} name={`${info?.project?.name ?? "site"}-${page?.title ?? ""}`} />
             </TabsContent>
 
             <TabsContent value="team" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
@@ -745,6 +764,8 @@ function Inspector(props: {
   lockedBy?: string | undefined;
   readOnly: boolean;
   onEdit: (f: "text" | "sub" | "label", v: string) => void;
+  onLink: (v: string) => void;
+  pages: Page[];
   onStyle: (k: keyof BlockStyle, v: unknown) => void;
   onGeo: (g: Geo) => void;
   onFront: () => void;
@@ -803,6 +824,23 @@ function Inspector(props: {
             onCommit={(v) => props.onEdit(f, v)} />
         </div>
       ))}
+      {["button", "navbar", "hero", "pricing", "login", "register"].includes(node.type) && (
+        <div className="space-y-2 border-t pt-4">
+          <Label>Button destination</Label>
+          <select aria-label="Button destination type" disabled={disabled} value={node.href.startsWith("?page=") ? "page" : "url"}
+            onChange={(e) => props.onLink(e.target.value === "page" ? `?page=${props.pages[0]?.id ?? ""}` : "")}
+            className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+            <option value="url">Website or payment link</option><option value="page">Another page in this project</option>
+          </select>
+          {node.href.startsWith("?page=") ? (
+            <select aria-label="Destination page" disabled={disabled} value={node.href.slice(6)} onChange={(e) => props.onLink(`?page=${e.target.value}`)} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+              {props.pages.map((pg) => <option key={pg.id} value={pg.id}>{pg.title}</option>)}
+            </select>
+          ) : <Input aria-label="Website or payment URL" disabled={disabled} type="url" placeholder="https://checkout.example.com/…" defaultValue={node.href} key={node.id + node.href}
+              onBlur={(e) => { if (e.target.value !== node.href) props.onLink(e.target.value.trim()); }} />}
+          <p className="text-xs text-muted-foreground">Paste your payment provider's checkout link, or select a project page. Sign-in and sign-up blocks also need a destination; they do not create user accounts.</p>
+        </div>
+      )}
       <div className="space-y-3">
         <Label className="block">Style</Label>
         {color("bg", "Background")}
@@ -882,7 +920,7 @@ function ThemePanel({ theme, readOnly, onChange }: { theme: Theme; readOnly: boo
   );
 }
 
-function CodeView({ exp, name }: { exp: { html: string; css: string; js: string }; name: string }) {
+function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: string }; pages: Record<string, string>; name: string }) {
   const files = [
     { k: "index.html", v: exp.html },
     { k: "styles.css", v: exp.css },
@@ -892,6 +930,8 @@ function CodeView({ exp, name }: { exp: { html: string; css: string; js: string 
     const JSZip = (await import("jszip")).default;
     const z = new JSZip();
     for (const f of files) z.file(f.k, f.v);
+    for (const [id, html] of Object.entries(pages)) z.file(`page-${id}.html`, html.replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
+    z.file("index.html", exp.html.replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
     const blob = await z.generateAsync({ type: "blob" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

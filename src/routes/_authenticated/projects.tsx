@@ -14,6 +14,8 @@ export const Route = createFileRoute("/_authenticated/projects")({
       { name: "description", content: "All the websites you and your team are building in WebCraft." },
       { property: "og:title", content: "Your projects — WebCraft" },
       { property: "og:description", content: "All the websites you and your team are building in WebCraft." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Projects,

@@ -1,0 +1,1 @@
+ALTER TABLE public.published_sites ADD COLUMN pages_html jsonb NOT NULL DEFAULT '{}'::jsonb;

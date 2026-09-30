@@ -8,6 +8,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "A visual website builder where designers and developers edit the same page at once — no locks on the whole page, no waiting." },
       { property: "og:title", content: "WebCraft — Build websites together, live" },
       { property: "og:description", content: "Edit the same page at the same time. Only the element you touch is reserved." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Landing,
