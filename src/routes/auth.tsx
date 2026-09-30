@@ -14,6 +14,8 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Sign in to WebCraft to build websites together with your team." },
       { property: "og:title", content: "Sign in — WebCraft" },
       { property: "og:description", content: "Sign in to WebCraft to build websites together with your team." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,

@@ -419,7 +419,7 @@ function EditorPage() {
         <Popover>
           <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> <span className="hidden lg:inline">Publish</span></Button></PopoverTrigger>
           <PopoverContent align="end" className="w-80 space-y-3 text-sm">
-            <p className="font-medium">Publish this page as a public website</p>
+            <p className="font-medium">Publish your website</p>
             {published ? (
               <>
                 <p className="text-muted-foreground">Live since {new Date(published.updated_at).toLocaleString()}.</p>
@@ -432,7 +432,7 @@ function EditorPage() {
               </>
             ) : (
               <>
-                <p className="text-muted-foreground">Anyone with the link will be able to see the current design page.</p>
+                <p className="text-muted-foreground">Anyone with the link can see this page and linked project pages.</p>
                 <Button size="sm" onClick={publishSite}>Publish now</Button>
               </>
             )}

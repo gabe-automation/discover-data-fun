@@ -25,8 +25,8 @@
 - [x] Visible "New blank page" button
 
 ## Next
-- [ ] Keep chat reachable and confirm send/receive in a signed-in project
-- [ ] Polish website templates and make their actions configurable in preview, published pages, and exported sites
+- [x] Keep chat reachable and confirm send/receive in a signed-in project
+- [x] Polish website templates and make their actions configurable in preview, published pages, and exported sites
 - [ ] Revision history + rollback
 - [ ] Nested sections (children inside Section blocks)
 - [ ] Inline text editing on the canvas
