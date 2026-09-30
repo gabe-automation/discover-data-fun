@@ -1,3 +1,4 @@
+import { SITE_TEMPLATES } from "@/lib/siteTemplates";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -38,6 +39,8 @@ function Projects() {
     },
   });
 
+  const [tpl, setTpl] = useState("");
+
   async function create(e: React.FormEvent) {
     e.preventDefault();
     const { data, error } = await supabase.rpc("create_project", { _name: name });
@@ -46,6 +49,7 @@ function Projects() {
       return;
     }
     setName("");
+    if (tpl) sessionStorage.setItem(`webcraft:tpl:${data}`, tpl);
     qc.invalidateQueries({ queryKey: ["projects"] });
     navigate({ to: "/p/$projectId", params: { projectId: data } });
   }
@@ -62,6 +66,16 @@ function Projects() {
           <Input placeholder="New site name, e.g. Studio North" value={name} onChange={(e) => setName(e.target.value)} />
           <Button type="submit">Create</Button>
         </form>
+        <p className="mt-6 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start from</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {[{ id: "", name: "Blank page", description: "An empty canvas." }, ...SITE_TEMPLATES].map((t) => (
+            <button key={t.id || "blank"} type="button" onClick={() => setTpl(t.id)}
+              className={`rounded-lg border p-3 text-left text-sm transition ${tpl === t.id ? "border-primary bg-secondary" : "bg-card hover:border-foreground/30"}`}>
+              <span className="block font-medium">{t.name}</span>
+              <span className="text-xs text-muted-foreground">{t.description}</span>
+            </button>
+          ))}
+        </div>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {isLoading && <p className="text-muted-foreground">Loading…</p>}
           {projects?.length === 0 && <p className="text-muted-foreground">No projects yet — create your first one above.</p>}

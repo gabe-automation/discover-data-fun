@@ -305,6 +305,16 @@ function EditorPage() {
     await Promise.all(jobs);
     toast.success(`${t.name} template added`);
   }
+  // Apply a template picked on the projects screen, once the first page is ready.
+  useEffect(() => {
+    if (!room.loaded || !page || page.kind !== "canvas" || readOnly) return;
+    const key = `webcraft:tpl:${projectId}`;
+    const id = sessionStorage.getItem(key);
+    if (!id) return;
+    sessionStorage.removeItem(key);
+    const t = SITE_TEMPLATES.find((x) => x.id === id);
+    if (t && views.length === 0) void applyTemplate(t);
+  }, [room.loaded, page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   function openChat(prefill?: string) {
     if (prefill) setChatDraft(prefill);
     const c = pages.find((x) => x.kind === "chat");
