@@ -282,7 +282,7 @@ function EditorPage() {
   function previewSite() {
     if (page?.kind !== "canvas") { toast.info("Open a design page to preview it."); return; }
     const data = JSON.stringify(sitePages).replace(/</g, "\\u003c");
-    const handler = `<script>var pages=${data};function navigatePage(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=new URL(a.href).searchParams.get('page');if(pages[id]){e.preventDefault();document.open();document.write(pages[id]);document.close();document.addEventListener('click',navigatePage)}}document.addEventListener('click',navigatePage)</script>`;
+    const handler = `<script>var pages=${data};function navigatePage(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=a.getAttribute('href').slice(6);if(pages[id]){e.preventDefault();document.open();document.write(pages[id]);document.close();document.addEventListener('click',navigatePage)}}document.addEventListener('click',navigatePage)</script>`;
     const html = singleHtml().replace('</body>', `${handler}</body>`);
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     window.open(url, "_blank");
