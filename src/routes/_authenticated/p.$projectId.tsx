@@ -611,7 +611,8 @@ function EditorPage() {
                   lockedBy={selLockedBy}
                   readOnly={readOnly}
                    onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
-                   onLink={(v) => room.op(sel.id, { href: v }, "linked", labelOf(sel))}
+                    onLink={(v) => room.op(sel.id, { href: v }, "linked", labelOf(sel))}
+                    pages={pages.filter((p) => p.kind === "canvas")}
                   onStyle={(k, v) => room.op(sel.id, { [`s.${k}`]: v ?? null }, "styled", labelOf(sel))}
                   onGeo={(g) => commitGeo(sel.id, g, "resized")}
                   onFront={() => {
@@ -759,7 +760,7 @@ function Inspector(props: {
   readOnly: boolean;
   onEdit: (f: "text" | "sub" | "label", v: string) => void;
   onLink: (v: string) => void;
-  pages: never[];
+  pages: Page[];
   onStyle: (k: keyof BlockStyle, v: unknown) => void;
   onGeo: (g: Geo) => void;
   onFront: () => void;
@@ -818,6 +819,23 @@ function Inspector(props: {
             onCommit={(v) => props.onEdit(f, v)} />
         </div>
       ))}
+      {["button", "navbar", "hero", "pricing", "login", "register"].includes(node.type) && (
+        <div className="space-y-2 border-t pt-4">
+          <Label>Button destination</Label>
+          <select aria-label="Button destination type" disabled={disabled} value={node.href.startsWith("?page=") ? "page" : "url"}
+            onChange={(e) => props.onLink(e.target.value === "page" ? `?page=${props.pages[0]?.id ?? ""}` : "")}
+            className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+            <option value="url">Website or payment link</option><option value="page">Another page in this project</option>
+          </select>
+          {node.href.startsWith("?page=") ? (
+            <select aria-label="Destination page" disabled={disabled} value={node.href.slice(6)} onChange={(e) => props.onLink(`?page=${e.target.value}`)} className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+              {props.pages.map((pg) => <option key={pg.id} value={pg.id}>{pg.title}</option>)}
+            </select>
+          ) : <Input aria-label="Website or payment URL" disabled={disabled} type="url" placeholder="https://checkout.example.com/…" defaultValue={node.href} key={node.id + node.href}
+              onBlur={(e) => { if (e.target.value !== node.href) props.onLink(e.target.value.trim()); }} />}
+          <p className="text-xs text-muted-foreground">Paste your payment provider's checkout link, or select a project page. Sign-in and sign-up blocks also need a destination; they do not create user accounts.</p>
+        </div>
+      )}
       <div className="space-y-3">
         <Label className="block">Style</Label>
         {color("bg", "Background")}
