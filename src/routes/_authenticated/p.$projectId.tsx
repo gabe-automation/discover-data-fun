@@ -19,7 +19,7 @@ import { Whiteboard } from "@/components/editor/Whiteboard";
 import { ChatPage } from "@/components/editor/ChatPage";
 import { ActivityPreview } from "@/components/editor/ActivityPreview";
 import { CollabTextarea } from "@/components/editor/CollabTextarea";
-import { BLOCKS, BREAKPOINTS, DEFAULT_THEME, type BlockStyle, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
+import { BLOCKS, BREAKPOINTS, DEFAULT_THEME, safeHref, type BlockStyle, type BlockType, type Breakpoint, type Theme } from "@/lib/blocks";
 import { generateExport, toView, type Geo, type NodeView } from "@/lib/model";
 import { keyBetween, val } from "@/lib/crdt";
 import { useRoom, type Activity, type Me } from "@/lib/useRoom";
@@ -38,6 +38,8 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
       { name: "description", content: "Edit your website live with your team in WebCraft." },
       { property: "og:title", content: "Editor — WebCraft" },
       { property: "og:description", content: "Edit your website live with your team in WebCraft." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: EditorPage,
@@ -279,14 +281,16 @@ function EditorPage() {
   const siteUrl = typeof window !== "undefined" ? `${window.location.origin}/site/${projectId}` : "";
   function previewSite() {
     if (page?.kind !== "canvas") { toast.info("Open a design page to preview it."); return; }
-    const html = singleHtml().replace('</body>', `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=new URL(a.href).searchParams.get('page');var pages=${JSON.stringify(sitePages).replace(/</g, "\\u003c")};if(pages[id]){e.preventDefault();document.open();document.write(pages[id]);document.close()}})</script></body>`);
+    const data = JSON.stringify(sitePages).replace(/</g, "\\u003c");
+    const handler = `<script>document.addEventListener('click',function(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=new URL(a.href).searchParams.get('page');var pages=${data};if(pages[id]){e.preventDefault();document.open();document.write(pages[id].replace('</body>',document.currentScript?.outerHTML||''+'</body>'));document.close()}})</script>`;
+    const html = singleHtml().replace('</body>', `${handler}</body>`);
     const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
     window.open(url, "_blank");
   }
   async function publishSite() {
     if (page?.kind !== "canvas") { toast.info("Open the design page you want to publish."); return; }
     if (!views.length) { toast.info("This page is empty — add some blocks first."); return; }
-    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), pages_html: sitePages, published_by: user.id, updated_at: new Date().toISOString() });
+    const { error } = await supabase.from("published_sites").upsert({ project_id: projectId, title: info?.project?.name ?? "", html: singleHtml(), pages_html: sitePages as never, published_by: user.id, updated_at: new Date().toISOString() });
     if (error) { toast.error("Couldn't publish"); return; }
     qc.invalidateQueries({ queryKey: ["published", projectId] });
     toast.success("Site published", { action: { label: "Open", onClick: () => window.open(siteUrl, "_blank") } });
@@ -312,8 +316,9 @@ function EditorPage() {
         text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "",
       }, "created", `${def.name} (${t.name} template)`);
     });
-    await Promise.all(jobs);
-    toast.success(`${t.name} template added`);
+    const results = await Promise.all(jobs);
+    if (results.some((r) => r !== "applied" && r !== "duplicate")) toast.error("Some template blocks could not be added");
+    else toast.success(`${t.name} template added`);
   }
   // Apply a template picked on the projects screen, once the first page is ready.
   useEffect(() => {
@@ -351,7 +356,7 @@ function EditorPage() {
     const pr = room.nodes[a.node_id];
     if (!pr) { toast.info("That item no longer exists."); return; }
     const target = val<string | null>(pr, "page", null) ?? firstCanvas;
-    if (target) setPageId(target);
+    if (target) { setPageId(target); setChatOpen(false); }
     if (val<string>(pr, "kind", "") !== "wb") setTimeout(() => select(a.node_id), 50);
   }
 
@@ -524,7 +529,7 @@ function EditorPage() {
           <ChatPage myId={user.id} members={members} messages={chat.messages} activity={room.activity} nodes={room.nodes} theme={theme}
             attach={attach} setAttach={setAttach} send={chat.send} remove={chat.remove} onJump={jumpTo}
             draft={chatDraft} clearDraft={() => setChatDraft("")} wbItems={wbItems}
-            onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) setPageId(w.id); }} />
+            onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } }} />
         ) : (
           <main ref={areaRef} className="min-w-0 flex-1 overflow-auto bg-dotgrid p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
             {!room.loaded || !page ? (
@@ -611,7 +616,7 @@ function EditorPage() {
                   lockedBy={selLockedBy}
                   readOnly={readOnly}
                    onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
-                    onLink={(v) => room.op(sel.id, { href: v }, "linked", labelOf(sel))}
+                    onLink={(v) => { if (v && !safeHref(v)) { toast.error("Use a valid website, payment, email, or project page link"); return; } room.op(sel.id, { href: v }, "linked", labelOf(sel)); }}
                     pages={pages.filter((p) => p.kind === "canvas")}
                   onStyle={(k, v) => room.op(sel.id, { [`s.${k}`]: v ?? null }, "styled", labelOf(sel))}
                   onGeo={(g) => commitGeo(sel.id, g, "resized")}
@@ -687,7 +692,7 @@ function EditorPage() {
             </TabsContent>
 
             <TabsContent value="code" className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-              <CodeView exp={exp} name={`${info?.project?.name ?? "site"}-${page?.title ?? ""}`} />
+                <CodeView exp={exp} pages={sitePages} name={`${info?.project?.name ?? "site"}-${page?.title ?? ""}`} />
             </TabsContent>
 
             <TabsContent value="team" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
@@ -915,7 +920,7 @@ function ThemePanel({ theme, readOnly, onChange }: { theme: Theme; readOnly: boo
   );
 }
 
-function CodeView({ exp, name }: { exp: { html: string; css: string; js: string }; name: string }) {
+function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: string }; pages: Record<string, string>; name: string }) {
   const files = [
     { k: "index.html", v: exp.html },
     { k: "styles.css", v: exp.css },
@@ -925,6 +930,8 @@ function CodeView({ exp, name }: { exp: { html: string; css: string; js: string 
     const JSZip = (await import("jszip")).default;
     const z = new JSZip();
     for (const f of files) z.file(f.k, f.v);
+    for (const [id, html] of Object.entries(pages)) z.file(`page-${id}.html`, html.replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
+    z.file("index.html", exp.html.replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
     const blob = await z.generateAsync({ type: "blob" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
