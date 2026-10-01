@@ -580,6 +580,7 @@ function EditorPage() {
             )}
           </main>
         )}
+        </div>
 
         {/* Right panel */}
         {page?.kind !== "chat" && (
