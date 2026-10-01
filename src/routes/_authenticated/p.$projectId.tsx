@@ -48,6 +48,18 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 type Page = { id: string; kind: string; title: string; sort: string };
 const PAGE_ICON = { canvas: FileText, whiteboard: PenTool, chat: MessagesSquare } as Record<string, typeof FileText>;
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
 function EditorPage() {
   const { projectId } = Route.useParams();
   const { user } = Route.useRouteContext();
@@ -71,7 +83,8 @@ function EditorPage() {
     [user.id, myProfile],
   );
   const myRole = info?.members.find((m) => m.user_id === user.id)?.role;
-  const readOnly = myRole === "viewer";
+  const isMobile = useMediaQuery("(max-width: 767px)");
+  const readOnly = myRole === "viewer" || isMobile;
   const room = useRoom(projectId, me);
   const shared = useSharedText(projectId, !!myRole && !readOnly);
   const members = useMemo(
@@ -384,7 +397,11 @@ function EditorPage() {
           {chat.unread > 0 && !chatOpen && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
         </Button>
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto [&>*]:shrink-0">
-        {readOnly && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
+        {readOnly && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title={isMobile ? "Editing is only available on a larger screen" : undefined}>
+            {isMobile ? "View only on mobile" : "View only"}
+          </span>
+        )}
         {page?.kind === "canvas" ? (
           <div className="mx-auto flex rounded-lg border bg-background p-0.5">
             {(["desktop", "tablet", "mobile"] as Breakpoint[]).map((b) => {
@@ -453,7 +470,7 @@ function EditorPage() {
 
       <div className="flex min-h-0 flex-1">
         {/* Pages + blocks */}
-        <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r bg-sidebar p-3">
+        <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-sidebar p-3 md:flex">
           <div className="mb-1 flex items-center justify-between px-1">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pages</p>
             <DropdownMenu>
@@ -500,7 +517,7 @@ function EditorPage() {
               <Plus className="size-4" /> New blank page
             </button>
           )}
-          {page?.kind === "canvas" && (
+          {page?.kind === "canvas" && !readOnly && (
             <>
               <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Blocks</p>
               <div className="grid grid-cols-2 gap-1.5">
@@ -519,6 +536,23 @@ function EditorPage() {
           )}
         </aside>
 
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile page switcher (sidebars are hidden on small screens) */}
+          <div className="flex items-center gap-1 overflow-x-auto border-b bg-sidebar px-2 py-1.5 md:hidden">
+            {pages.map((pg) => {
+              const Icon = PAGE_ICON[pg.kind] ?? FileText;
+              return (
+                <button key={pg.id} onClick={() => { setPageId(pg.id); setChatOpen(false); }}
+                  className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs ${page?.id === pg.id ? "bg-secondary font-medium" : "text-muted-foreground"}`}>
+                  <Icon className="size-3.5" /> {pg.title}
+                </button>
+              );
+            })}
+            <button onClick={() => openChat()} className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs ${chatOpen ? "bg-secondary font-medium" : "text-muted-foreground"}`}>
+              <MessagesSquare className="size-3.5" /> Chat
+              {chat.unread > 0 && <span className="rounded-full bg-primary px-1 text-[10px] text-primary-foreground">{chat.unread}</span>}
+            </button>
+          </div>
         {page?.kind === "whiteboard" ? (
           <Whiteboard key={page.id} pageId={page.id} nodes={room.nodes} userId={user.id} session={room.session} leases={room.leases}
             cursors={room.cursors} drags={room.drags} readOnly={readOnly} shared={shared}
@@ -546,10 +580,11 @@ function EditorPage() {
             )}
           </main>
         )}
+        </div>
 
         {/* Right panel */}
         {page?.kind !== "chat" && (
-        <aside className="flex w-80 shrink-0 flex-col border-l bg-card">
+        <aside className="hidden w-80 shrink-0 flex-col border-l bg-card md:flex">
           <Tabs defaultValue="inspect" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="m-2 grid grid-cols-5">
               <TabsTrigger value="inspect">Edit</TabsTrigger>
