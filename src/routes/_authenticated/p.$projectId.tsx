@@ -397,7 +397,11 @@ function EditorPage() {
           {chat.unread > 0 && !chatOpen && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
         </Button>
         <div className="flex min-w-0 items-center gap-2 overflow-x-auto [&>*]:shrink-0">
-        {readOnly && <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">View only</span>}
+        {readOnly && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground" title={isMobile ? "Editing is only available on a larger screen" : undefined}>
+            {isMobile ? "View only on mobile" : "View only"}
+          </span>
+        )}
         {page?.kind === "canvas" ? (
           <div className="mx-auto flex rounded-lg border bg-background p-0.5">
             {(["desktop", "tablet", "mobile"] as Breakpoint[]).map((b) => {
