@@ -470,7 +470,7 @@ function EditorPage() {
 
       <div className="flex min-h-0 flex-1">
         {/* Pages + blocks */}
-        <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r bg-sidebar p-3">
+        <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-sidebar p-3 md:flex">
           <div className="mb-1 flex items-center justify-between px-1">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pages</p>
             <DropdownMenu>
@@ -517,7 +517,7 @@ function EditorPage() {
               <Plus className="size-4" /> New blank page
             </button>
           )}
-          {page?.kind === "canvas" && (
+          {page?.kind === "canvas" && !readOnly && (
             <>
               <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Blocks</p>
               <div className="grid grid-cols-2 gap-1.5">
@@ -566,7 +566,7 @@ function EditorPage() {
 
         {/* Right panel */}
         {page?.kind !== "chat" && (
-        <aside className="flex w-80 shrink-0 flex-col border-l bg-card">
+        <aside className="hidden w-80 shrink-0 flex-col border-l bg-card md:flex">
           <Tabs defaultValue="inspect" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="m-2 grid grid-cols-5">
               <TabsTrigger value="inspect">Edit</TabsTrigger>
