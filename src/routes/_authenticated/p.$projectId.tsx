@@ -936,7 +936,7 @@ function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: 
   };
   function preview() {
     const w = window.open("", "_blank");
-    if (!w) return toast.error("Allow pop-ups to preview");
+    if (!w) { toast.error("Allow pop-ups to preview"); return; }
     w.document.open(); w.document.write(combined()); w.document.close();
   }
   async function zip() {
