@@ -921,17 +921,30 @@ function ThemePanel({ theme, readOnly, onChange }: { theme: Theme; readOnly: boo
 }
 
 function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: string }; pages: Record<string, string>; name: string }) {
-  const files = [
-    { k: "index.html", v: exp.html },
-    { k: "styles.css", v: exp.css },
-    { k: "script.js", v: exp.js },
-  ];
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const base: Record<string, string> = { "index.html": exp.html, "styles.css": exp.css, "script.js": exp.js };
+  const files = Object.keys(base).map((k) => ({ k, v: edits[k] ?? base[k]!, edited: k in edits }));
+  const val = (k: string) => edits[k] ?? base[k]!;
+  const combined = () => {
+    let html = val("index.html");
+    const css = `<style>${val("styles.css")}</style>`;
+    const js = `<script>${val("script.js")}</script>`;
+    html = html.replace(/<link[^>]+styles\.css[^>]*>/i, css).replace(/<script[^>]+script\.js[^>]*><\/script>/i, js);
+    if (!html.includes(css)) html = html.replace(/<\/head>/i, `${css}</head>`);
+    if (!html.includes(js)) html = html.replace(/<\/body>/i, `${js}</body>`);
+    return html;
+  };
+  function preview() {
+    const w = window.open("", "_blank");
+    if (!w) return toast.error("Allow pop-ups to preview");
+    w.document.open(); w.document.write(combined()); w.document.close();
+  }
   async function zip() {
     const JSZip = (await import("jszip")).default;
     const z = new JSZip();
     for (const f of files) z.file(f.k, f.v);
     for (const [id, html] of Object.entries(pages)) z.file(`page-${id}.html`, html.replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
-    z.file("index.html", exp.html.replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
+    z.file("index.html", val("index.html").replace(/\?page=([0-9a-f-]{36})/gi, 'page-$1.html'));
     const blob = await z.generateAsync({ type: "blob" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -941,24 +954,47 @@ function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: 
   }
   return (
     <Tabs defaultValue="index.html" className="flex h-full flex-col">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <TabsList className="h-8">
-          {files.map((f) => <TabsTrigger key={f.k} value={f.k} className="text-xs">{f.k}</TabsTrigger>)}
+          {files.map((f) => <TabsTrigger key={f.k} value={f.k} className="text-xs">{f.k}{f.edited ? " •" : ""}</TabsTrigger>)}
         </TabsList>
-        <Button size="icon" variant="ghost" className="ml-auto size-8" onClick={zip} aria-label="Export as ZIP"><Download /></Button>
+        <Button size="sm" variant="ghost" className="ml-auto h-8 px-2 text-xs" onClick={preview}>Preview</Button>
+        <Button size="icon" variant="ghost" className="size-8" onClick={zip} aria-label="Export as ZIP"><Download /></Button>
       </div>
+      {Object.keys(edits).length > 0 && (
+        <p className="mt-1 text-[11px] text-muted-foreground">Edited code is used for Preview and ZIP export only; canvas changes won't overwrite your edits until you reset.</p>
+      )}
       {files.map((f) => (
         <TabsContent key={f.k} value={f.k} className="relative mt-2 min-h-0 flex-1">
-          <Button
-            size="icon"
-            variant="secondary"
-            className="absolute right-2 top-2 size-7"
-            onClick={() => navigator.clipboard.writeText(f.v).then(() => toast.success(`${f.k} copied`))}
-            aria-label={`Copy ${f.k}`}
-          >
-            <Copy className="size-3.5" />
-          </Button>
-          <pre className="h-full overflow-auto rounded-md bg-ink p-3 font-mono text-[11px] leading-relaxed text-paper">{f.v}</pre>
+          <div className="absolute right-2 top-2 z-10 flex gap-1">
+            {f.edited && (
+              <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => setEdits(({ [f.k]: _, ...rest }) => rest)}>Reset</Button>
+            )}
+            <Button
+              size="icon"
+              variant="secondary"
+              className="size-7"
+              onClick={() => navigator.clipboard.writeText(f.v).then(() => toast.success(`${f.k} copied`))}
+              aria-label={`Copy ${f.k}`}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+          <textarea
+            value={f.v}
+            spellCheck={false}
+            aria-label={`Edit ${f.k}`}
+            onChange={(e) => { const v = e.target.value; setEdits((s) => ({ ...s, [f.k]: v })); }}
+            onKeyDown={(e) => {
+              if (e.key !== "Tab") return;
+              e.preventDefault();
+              const t = e.currentTarget, s = t.selectionStart, en = t.selectionEnd;
+              const v = t.value.slice(0, s) + "  " + t.value.slice(en);
+              setEdits((st) => ({ ...st, [f.k]: v }));
+              requestAnimationFrame(() => t.setSelectionRange(s + 2, s + 2));
+            }}
+            className="h-full w-full resize-none overflow-auto whitespace-pre rounded-md bg-ink p-3 font-mono text-[11px] leading-relaxed text-paper outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
         </TabsContent>
       ))}
     </Tabs>
