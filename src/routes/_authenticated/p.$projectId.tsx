@@ -48,6 +48,18 @@ export const Route = createFileRoute("/_authenticated/p/$projectId")({
 type Page = { id: string; kind: string; title: string; sort: string };
 const PAGE_ICON = { canvas: FileText, whiteboard: PenTool, chat: MessagesSquare } as Record<string, typeof FileText>;
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
 function EditorPage() {
   const { projectId } = Route.useParams();
   const { user } = Route.useRouteContext();
@@ -71,7 +83,8 @@ function EditorPage() {
     [user.id, myProfile],
   );
   const myRole = info?.members.find((m) => m.user_id === user.id)?.role;
-  const readOnly = myRole === "viewer";
+  const isMobile = useMediaQuery("(max-width: 767px)");
+  const readOnly = myRole === "viewer" || isMobile;
   const room = useRoom(projectId, me);
   const shared = useSharedText(projectId, !!myRole && !readOnly);
   const members = useMemo(
