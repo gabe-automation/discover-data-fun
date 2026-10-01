@@ -536,6 +536,23 @@ function EditorPage() {
           )}
         </aside>
 
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile page switcher (sidebars are hidden on small screens) */}
+          <div className="flex items-center gap-1 overflow-x-auto border-b bg-sidebar px-2 py-1.5 md:hidden">
+            {pages.map((pg) => {
+              const Icon = PAGE_ICON[pg.kind] ?? FileText;
+              return (
+                <button key={pg.id} onClick={() => { setPageId(pg.id); setChatOpen(false); }}
+                  className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs ${page?.id === pg.id ? "bg-secondary font-medium" : "text-muted-foreground"}`}>
+                  <Icon className="size-3.5" /> {pg.title}
+                </button>
+              );
+            })}
+            <button onClick={() => openChat()} className={`flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs ${chatOpen ? "bg-secondary font-medium" : "text-muted-foreground"}`}>
+              <MessagesSquare className="size-3.5" /> Chat
+              {chat.unread > 0 && <span className="rounded-full bg-primary px-1 text-[10px] text-primary-foreground">{chat.unread}</span>}
+            </button>
+          </div>
         {page?.kind === "whiteboard" ? (
           <Whiteboard key={page.id} pageId={page.id} nodes={room.nodes} userId={user.id} session={room.session} leases={room.leases}
             cursors={room.cursors} drags={room.drags} readOnly={readOnly} shared={shared}
