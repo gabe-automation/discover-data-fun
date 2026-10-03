@@ -6,7 +6,6 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { generatePlan, type Plan } from "@/lib/planner.functions";
 import { snapGrid, type DragPrefs } from "@/lib/dragPrefs";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -235,40 +234,6 @@ export function Whiteboard(p: {
     toast.success("Template added");
   }
 
-  const [aiOpen, setAiOpen] = useState(false);
-  const [goal, setGoal] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const planFn = useServerFn(generatePlan);
-  async function runPlanner() {
-    if (goal.trim().length < 3 || aiBusy) return;
-    setAiBusy(true);
-    try {
-      const r = await planFn({ data: { projectId: p.projectId, goal: goal.trim() } });
-      if (!r.ok) { toast.error(r.error); return; }
-      await placePlan(r.plan);
-      setAiOpen(false);
-      setGoal("");
-      toast.success(`Plan added: ${r.plan.milestones.length} milestones`);
-    } catch (e) {
-      toast.error(e instanceof Error && e.message ? e.message : "Couldn't create the plan.");
-    } finally { setAiBusy(false); }
-  }
-  async function placePlan(plan: Plan) {
-    const el = scrollRef.current!;
-    const ox = Math.round(el.scrollLeft / zoom + 60), oy = Math.round(el.scrollTop / zoom + 80);
-    const PRI = { high: "#fbcfe8", medium: "#fde68a", low: "#bbf7d0" } as const;
-    const colW = 300, gap = 32, cardH = 130;
-    await create("text", { x: ox, y: oy - 70, w: Math.max(600, plan.milestones.length * (colW + gap)), h: 56 }, { text: `🎯 ${goal.trim()}\n${plan.summary}`, color: "#1c1917" });
-    await create("arrow", { x: ox, y: oy - 8, w: plan.milestones.length * (colW + gap) - gap, h: 0 }, { color: "#1c1917" });
-    for (const [i, ms] of plan.milestones.entries()) {
-      const x = ox + i * (colW + gap);
-      const fh = 60 + ms.tasks.length * (cardH + 16);
-      await create("frame", { x, y: oy + 10, w: colW, h: fh }, { text: `${ms.when ? ms.when + " · " : ""}${ms.title}` }, keyBetween(null, items[0]?.order ?? null));
-      await Promise.all(ms.tasks.map((t, j) => create("sticky", { x: x + 20, y: oy + 60 + j * (cardH + 16), w: colW - 40, h: cardH },
-        { text: `${t.priority === "high" ? "▲ High" : t.priority === "low" ? "▽ Low" : "◆ Medium"} · ${t.title}\n${t.detail}`, color: PRI[t.priority] })));
-    }
-  }
-
   const tools: { t: Tool; icon: typeof Square; k: string; name: string }[] = [
     { t: "select", icon: MousePointer2, k: "V", name: "Select" }, { t: "hand", icon: Hand, k: "H", name: "Pan" },
     { t: "sticky", icon: StickyNote, k: "S", name: "Sticky note" }, { t: "rect", icon: Square, k: "R", name: "Rectangle" },
@@ -293,7 +258,6 @@ export function Whiteboard(p: {
             className={`size-5 rounded-full border ${color === c ? "ring-2 ring-ring ring-offset-1" : ""}`} style={{ background: c }} />
         ))}
         <span className="mx-1 h-6 w-px bg-border" />
-        <Button size="sm" variant="ghost" disabled={p.readOnly} onClick={() => setAiOpen(true)}><Sparkles className="size-4" /> AI plan</Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="sm" variant="ghost" disabled={p.readOnly}><LayoutTemplate className="size-4" /> Plan</Button></DropdownMenuTrigger>
           <DropdownMenuContent>
@@ -369,23 +333,6 @@ export function Whiteboard(p: {
         </div>
       </div>
 
-      <Dialog open={aiOpen} onOpenChange={(o) => !aiBusy && setAiOpen(o)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Sparkles className="size-5" /> Plan with AI</DialogTitle>
-            <DialogDescription>Describe what your team wants to achieve. You'll get milestones with prioritized tasks placed on this board for everyone.</DialogDescription>
-          </DialogHeader>
-          <Textarea autoFocus rows={5} value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={1500}
-            placeholder="e.g. Launch a landing page for our coffee subscription with a signup form in 3 weeks"
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runPlanner(); }} />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setAiOpen(false)} disabled={aiBusy}>Cancel</Button>
-            <Button onClick={runPlanner} disabled={aiBusy || goal.trim().length < 3}>
-              {aiBusy ? <><Loader2 className="size-4 animate-spin" /> Planning…</> : <><Sparkles className="size-4" /> Generate plan</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
