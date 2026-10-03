@@ -1,6 +1,19 @@
 export type BlockType =
   | "navbar" | "hero" | "heading" | "text" | "button" | "image" | "cards"
-  | "pricing" | "testimonial" | "login" | "register" | "divider" | "footer";
+  | "pricing" | "testimonial" | "login" | "register" | "divider" | "footer"
+  | "input" | "flex" | "grid" | "stack" | "absolute" | "section";
+
+export const CONTAINER_TYPES: BlockType[] = ["flex", "grid", "stack", "absolute", "section"];
+export const isContainer = (t: BlockType) => CONTAINER_TYPES.includes(t);
+export type BoxOpts = { gap?: number; cols?: number; dir?: "row" | "column"; align?: "start" | "center" | "end" | "stretch"; justify?: "start" | "center" | "end" | "between"; wrap?: boolean };
+export const BOX_KEYS: (keyof BoxOpts)[] = ["gap", "cols", "dir", "align", "justify", "wrap"];
+
+// Attribute names users may set. Event handlers (on*) are excluded: logic goes in the block script.
+export function cleanAttrs(a: Record<string, string> | undefined): [string, string][] {
+  if (!a) return [];
+  return Object.entries(a).filter(([k]) => /^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/.test(k) && !/^on/i.test(k) && !/^(style|class|id|src|href|srcdoc|formaction)$/i.test(k));
+}
+export const attrString = (a: Record<string, string> | undefined) => cleanAttrs(a).map(([k, v]) => ` ${k}="${esc(String(v))}"`).join("");
 
 export type Breakpoint = "desktop" | "tablet" | "mobile";
 export const BREAKPOINTS: Record<Breakpoint, { width: number; label: string; query: string }> = {
@@ -25,6 +38,12 @@ export const BLOCKS: Record<BlockType, BlockDef> = {
   register: { name: "Register form", w: 380, h: 360, text: "Create your account", sub: "", label: "Create account" },
   divider: { name: "Divider", w: 1080, h: 24, text: "", sub: "", label: "" },
   footer: { name: "Footer", w: 1200, h: 120, text: "© 2026 Studio North", sub: "Instagram · Newsletter · Email", label: "" },
+  input: { name: "Input field", w: 380, h: 84, text: "Email address", sub: "you@example.com", label: "" },
+  flex: { name: "Flex row", w: 960, h: 160, text: "Item one|Item two|Item three", sub: "", label: "" },
+  grid: { name: "Grid", w: 960, h: 280, text: "One|Two|Three|Four|Five|Six", sub: "", label: "" },
+  stack: { name: "Stack", w: 420, h: 260, text: "First|Second|Third", sub: "", label: "" },
+  absolute: { name: "Absolute box", w: 520, h: 300, text: "Back layer|Middle layer|Front layer", sub: "", label: "" },
+  section: { name: "Section", w: 1200, h: 320, text: "Section title", sub: "Use sections to group content with comfortable spacing.", label: "" },
 };
 
 export type Theme = { primary: string; accent: string; surface: string; ink: string };
@@ -35,7 +54,17 @@ export function esc(s: string): string {
 }
 const split = (s: string) => s.split("|").map((x) => x.trim());
 
-export type BlockContent = { text: string; sub: string; label: string; href?: string };
+export type BlockContent = { text: string; sub: string; label: string; href?: string; attrs?: Record<string, string>; box?: BoxOpts };
+
+const JUST = { start: "flex-start", center: "center", end: "flex-end", between: "space-between" } as const;
+const ALIGN = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" } as const;
+function boxStyle(type: BlockType, b: BoxOpts = {}): string {
+  const gap = `gap:${b.gap ?? 16}px;`;
+  if (type === "grid") return `display:grid;grid-template-columns:repeat(${Math.max(1, Math.min(12, b.cols ?? 3))},minmax(0,1fr));${gap}align-items:${ALIGN[b.align ?? "stretch"]};`;
+  if (type === "absolute") return "position:relative;";
+  const dir = type === "stack" ? "column" : b.dir ?? "row";
+  return `display:flex;flex-direction:${dir};${gap}flex-wrap:${b.wrap ? "wrap" : "nowrap"};justify-content:${JUST[b.justify ?? "start"]};align-items:${ALIGN[b.align ?? "stretch"]};`;
+}
 
 // Only allow destinations that cannot execute script in the visitor's browser.
 export function safeHref(raw?: string): string {
