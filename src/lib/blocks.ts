@@ -1,6 +1,19 @@
 export type BlockType =
   | "navbar" | "hero" | "heading" | "text" | "button" | "image" | "cards"
-  | "pricing" | "testimonial" | "login" | "register" | "divider" | "footer";
+  | "pricing" | "testimonial" | "login" | "register" | "divider" | "footer"
+  | "input" | "flex" | "grid" | "stack" | "absolute" | "section";
+
+export const CONTAINER_TYPES: BlockType[] = ["flex", "grid", "stack", "absolute", "section"];
+export const isContainer = (t: BlockType) => CONTAINER_TYPES.includes(t);
+export type BoxOpts = { gap?: number; cols?: number; dir?: "row" | "column"; align?: "start" | "center" | "end" | "stretch"; justify?: "start" | "center" | "end" | "between"; wrap?: boolean };
+export const BOX_KEYS: (keyof BoxOpts)[] = ["gap", "cols", "dir", "align", "justify", "wrap"];
+
+// Attribute names users may set. Event handlers (on*) are excluded: logic goes in the block script.
+export function cleanAttrs(a: Record<string, string> | undefined): [string, string][] {
+  if (!a) return [];
+  return Object.entries(a).filter(([k]) => /^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/.test(k) && !/^on/i.test(k) && !/^(style|class|id|src|href|srcdoc|formaction)$/i.test(k));
+}
+export const attrString = (a: Record<string, string> | undefined) => cleanAttrs(a).map(([k, v]) => ` ${k}="${esc(String(v))}"`).join("");
 
 export type Breakpoint = "desktop" | "tablet" | "mobile";
 export const BREAKPOINTS: Record<Breakpoint, { width: number; label: string; query: string }> = {
@@ -25,6 +38,12 @@ export const BLOCKS: Record<BlockType, BlockDef> = {
   register: { name: "Register form", w: 380, h: 360, text: "Create your account", sub: "", label: "Create account" },
   divider: { name: "Divider", w: 1080, h: 24, text: "", sub: "", label: "" },
   footer: { name: "Footer", w: 1200, h: 120, text: "© 2026 Studio North", sub: "Instagram · Newsletter · Email", label: "" },
+  input: { name: "Input field", w: 380, h: 84, text: "Email address", sub: "you@example.com", label: "" },
+  flex: { name: "Flex row", w: 960, h: 160, text: "Item one|Item two|Item three", sub: "", label: "" },
+  grid: { name: "Grid", w: 960, h: 280, text: "One|Two|Three|Four|Five|Six", sub: "", label: "" },
+  stack: { name: "Stack", w: 420, h: 260, text: "First|Second|Third", sub: "", label: "" },
+  absolute: { name: "Absolute box", w: 520, h: 300, text: "Back layer|Middle layer|Front layer", sub: "", label: "" },
+  section: { name: "Section", w: 1200, h: 320, text: "Section title", sub: "Use sections to group content with comfortable spacing.", label: "" },
 };
 
 export type Theme = { primary: string; accent: string; surface: string; ink: string };
@@ -35,7 +54,17 @@ export function esc(s: string): string {
 }
 const split = (s: string) => s.split("|").map((x) => x.trim());
 
-export type BlockContent = { text: string; sub: string; label: string; href?: string };
+export type BlockContent = { text: string; sub: string; label: string; href?: string; attrs?: Record<string, string>; box?: BoxOpts };
+
+const JUST = { start: "flex-start", center: "center", end: "flex-end", between: "space-between" } as const;
+const ALIGN = { start: "flex-start", center: "center", end: "flex-end", stretch: "stretch" } as const;
+function boxStyle(type: BlockType, b: BoxOpts = {}): string {
+  const gap = `gap:${b.gap ?? 16}px;`;
+  if (type === "grid") return `display:grid;grid-template-columns:repeat(${Math.max(1, Math.min(12, b.cols ?? 3))},minmax(0,1fr));${gap}align-items:${ALIGN[b.align ?? "stretch"]};`;
+  if (type === "absolute") return "position:relative;";
+  const dir = type === "stack" ? "column" : b.dir ?? "row";
+  return `display:flex;flex-direction:${dir};${gap}flex-wrap:${b.wrap ? "wrap" : "nowrap"};justify-content:${JUST[b.justify ?? "start"]};align-items:${ALIGN[b.align ?? "stretch"]};`;
+}
 
 // Only allow destinations that cannot execute script in the visitor's browser.
 export function safeHref(raw?: string): string {
@@ -82,6 +111,17 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
       return `<hr class="wc-divider">`;
     case "footer":
       return `<footer class="wc-footer"><span>${t}</span><span>${s}</span></footer>`;
+    case "input": {
+      const a = { type: "text", name: "field", ...(c.attrs ?? {}) };
+      return `<label class="wc-field"><span>${t}</span><input placeholder="${s}"${attrString(a)}><small class="wc-field-msg" aria-live="polite"></small></label>`;
+    }
+    case "section":
+      return `<section class="wc-section"><h2>${t}</h2><p>${s}</p></section>`;
+    case "flex": case "grid": case "stack": case "absolute": {
+      const items = split(c.text).filter(Boolean);
+      const inner = items.map((x, i) => `<div class="wc-item"${type === "absolute" ? ` style="left:${i * 14}%;top:${i * 16}%;z-index:${i + 1}"` : ""}>${esc(x)}</div>`).join("");
+      return `<div class="wc-box wc-box-${type}" style="${boxStyle(type, c.box)}">${inner}</div>`;
+    }
   }
 }
 
@@ -131,6 +171,16 @@ export const BLOCK_CSS = `
 .wc-form p{font:15px/1.5 system-ui,sans-serif;opacity:.7}.wc-form .wc-btn{height:44px;margin-top:12px;}
 .wc-divider{border:0;border-top:1px solid color-mix(in srgb,var(--wc-ink) 18%,transparent);margin:11px 0;}
 .wc-footer{height:100%;display:flex;justify-content:space-between;align-items:center;padding:0 40px;font:14px system-ui,sans-serif;opacity:.75;border-top:1px solid color-mix(in srgb,var(--wc-ink) 12%,transparent);}
+.wc-field{height:100%;display:flex;flex-direction:column;justify-content:center;gap:6px;font:500 14px system-ui,sans-serif;}
+.wc-field input{height:44px;border-radius:10px;border:1px solid color-mix(in srgb,var(--wc-ink) 22%,transparent);padding:0 14px;background:#fff;color:var(--wc-ink);font:15px system-ui,sans-serif;}
+.wc-field input:focus{outline:2px solid var(--wc-primary);outline-offset:1px}.wc-field input:invalid:not(:placeholder-shown){border-color:#b91c1c}
+.wc-field-msg{min-height:14px;font-size:12px;color:#b91c1c;font-weight:400}
+.wc-section{height:100%;display:flex;flex-direction:column;justify-content:center;gap:12px;padding:48px 80px;background:color-mix(in srgb,var(--wc-accent) 7%,var(--wc-surface));}
+.wc-section h2{margin:0;font-size:36px;font-weight:500}.wc-section p{margin:0;font:17px/1.6 system-ui,sans-serif;opacity:.75;max-width:640px}
+.wc-box{height:100%;padding:16px;border-radius:14px;border:1px dashed color-mix(in srgb,var(--wc-ink) 22%,transparent);font:15px system-ui,sans-serif;}
+.wc-item{flex:1;min-width:0;min-height:56px;display:flex;align-items:center;justify-content:center;padding:14px;border-radius:10px;background:color-mix(in srgb,var(--wc-primary) 10%,var(--wc-surface));border:1px solid color-mix(in srgb,var(--wc-primary) 25%,transparent);text-align:center;}
+.wc-box-absolute .wc-item{position:absolute;width:46%;height:46%;box-shadow:0 10px 24px -14px rgba(0,0,0,.4);}
+@media (max-width:640px){.wc-box-flex{flex-direction:column!important}.wc-box-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 `;
 
 // Per-block design overrides (stored as "s.<key>" properties on the node).

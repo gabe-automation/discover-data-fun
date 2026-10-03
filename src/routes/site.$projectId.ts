@@ -27,7 +27,7 @@ export const Route = createFileRoute("/site/$projectId")({
         const pages = data.pages_html && typeof data.pages_html === "object" && !Array.isArray(data.pages_html) ? data.pages_html as Record<string, unknown> : {};
         const html = pageId ? pages[pageId] : data.html;
         if (typeof html !== "string") return new Response("Page not found", { status: 404 });
-        return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=30" } });
+        return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=30", "content-security-policy": "sandbox allow-scripts allow-forms allow-popups allow-modals allow-top-navigation-by-user-activation" } });
       },
     },
   },
