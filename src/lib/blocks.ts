@@ -111,6 +111,17 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
       return `<hr class="wc-divider">`;
     case "footer":
       return `<footer class="wc-footer"><span>${t}</span><span>${s}</span></footer>`;
+    case "input": {
+      const a = { type: "text", name: "field", ...(c.attrs ?? {}) };
+      return `<label class="wc-field"><span>${t}</span><input placeholder="${s}"${attrString(a)}><small class="wc-field-msg" aria-live="polite"></small></label>`;
+    }
+    case "section":
+      return `<section class="wc-section"><h2>${t}</h2><p>${s}</p></section>`;
+    case "flex": case "grid": case "stack": case "absolute": {
+      const items = split(c.text).filter(Boolean);
+      const inner = items.map((x, i) => `<div class="wc-item"${type === "absolute" ? ` style="left:${i * 14}%;top:${i * 16}%;z-index:${i + 1}"` : ""}>${esc(x)}</div>`).join("");
+      return `<div class="wc-box wc-box-${type}" style="${boxStyle(type, c.box)}">${inner}</div>`;
+    }
   }
 }
 
@@ -160,6 +171,16 @@ export const BLOCK_CSS = `
 .wc-form p{font:15px/1.5 system-ui,sans-serif;opacity:.7}.wc-form .wc-btn{height:44px;margin-top:12px;}
 .wc-divider{border:0;border-top:1px solid color-mix(in srgb,var(--wc-ink) 18%,transparent);margin:11px 0;}
 .wc-footer{height:100%;display:flex;justify-content:space-between;align-items:center;padding:0 40px;font:14px system-ui,sans-serif;opacity:.75;border-top:1px solid color-mix(in srgb,var(--wc-ink) 12%,transparent);}
+.wc-field{height:100%;display:flex;flex-direction:column;justify-content:center;gap:6px;font:500 14px system-ui,sans-serif;}
+.wc-field input{height:44px;border-radius:10px;border:1px solid color-mix(in srgb,var(--wc-ink) 22%,transparent);padding:0 14px;background:#fff;color:var(--wc-ink);font:15px system-ui,sans-serif;}
+.wc-field input:focus{outline:2px solid var(--wc-primary);outline-offset:1px}.wc-field input:invalid:not(:placeholder-shown){border-color:#b91c1c}
+.wc-field-msg{min-height:14px;font-size:12px;color:#b91c1c;font-weight:400}
+.wc-section{height:100%;display:flex;flex-direction:column;justify-content:center;gap:12px;padding:48px 80px;background:color-mix(in srgb,var(--wc-accent) 7%,var(--wc-surface));}
+.wc-section h2{margin:0;font-size:36px;font-weight:500}.wc-section p{margin:0;font:17px/1.6 system-ui,sans-serif;opacity:.75;max-width:640px}
+.wc-box{height:100%;padding:16px;border-radius:14px;border:1px dashed color-mix(in srgb,var(--wc-ink) 22%,transparent);font:15px system-ui,sans-serif;}
+.wc-item{flex:1;min-width:0;min-height:56px;display:flex;align-items:center;justify-content:center;padding:14px;border-radius:10px;background:color-mix(in srgb,var(--wc-primary) 10%,var(--wc-surface));border:1px solid color-mix(in srgb,var(--wc-primary) 25%,transparent);text-align:center;}
+.wc-box-absolute .wc-item{position:absolute;width:46%;height:46%;box-shadow:0 10px 24px -14px rgba(0,0,0,.4);}
+@media (max-width:640px){.wc-box-flex{flex-direction:column!important}.wc-box-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 `;
 
 // Per-block design overrides (stored as "s.<key>" properties on the node).
