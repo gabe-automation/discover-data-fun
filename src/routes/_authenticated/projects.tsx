@@ -61,7 +61,7 @@ function Projects() {
       for (const p of pr.data ?? []) out[p.id] = { nodes: [], theme: { ...DEFAULT_THEME, ...(p.theme as Partial<Theme>) } };
       for (const row of n.data ?? []) {
         const props = row.props as unknown as Props;
-        if (val(props, "kind", "") === "wb") continue;
+        if (val<string>(props, "kind", "") === "wb") continue;
         const v = toView(row.id, props);
         if (!v || (v.page ?? first[row.project_id]) !== first[row.project_id]) continue;
         out[row.project_id]?.nodes.push(v);
@@ -117,7 +117,7 @@ function Projects() {
               params={{ projectId: p.id }}
               className="group overflow-hidden rounded-xl border bg-card shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift"
             >
-              {thumbs ? <SitePreview nodes={thumbs[p.id]?.nodes ?? []} theme={thumbs[p.id]?.theme} height={180} className="border-b" /> : <div className="h-[180px] animate-pulse border-b bg-muted" />}
+              {thumbs ? <SitePreview nodes={thumbs[p.id]?.nodes ?? []} theme={thumbs[p.id]?.theme ?? DEFAULT_THEME} height={180} className="border-b" /> : <div className="h-[180px] animate-pulse border-b bg-muted" />}
               <div className="p-4">
                 <h2 className="truncate text-xl group-hover:text-primary">{p.name}</h2>
                 <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{p.role}</p>
