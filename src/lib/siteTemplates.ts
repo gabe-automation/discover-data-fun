@@ -1,4 +1,5 @@
 import { BLOCKS, type BlockType } from "./blocks";
+import type { NodeView } from "./model";
 
 export type TplBlock = { type: BlockType; y: number; text?: string; sub?: string; label?: string; href?: string; w?: number; h?: number; x?: number };
 export type SiteTemplate = { id: string; name: string; description: string; blocks: TplBlock[] };
@@ -60,3 +61,17 @@ export const SITE_TEMPLATES: SiteTemplate[] = [
     ]),
   },
 ];
+
+/** Template blocks as page nodes, for thumbnails. */
+export function templateViews(t: SiteTemplate): NodeView[] {
+  return t.blocks.map((b, i) => {
+    const def = BLOCKS[b.type];
+    const w = Math.min(b.w ?? def.w, 1200), h = b.h ?? def.h;
+    const g = { x: b.x ?? Math.round((1200 - w) / 2), y: b.y, w, h };
+    return {
+      id: `${t.id}-${i}-0000-0000-000000000000`, type: b.type, parent: null, order: String(i).padStart(3, "0"),
+      text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "", page: null,
+      style: {}, attrs: {}, script: "", box: {}, geo: { desktop: g, tablet: g, mobile: g },
+    };
+  });
+}

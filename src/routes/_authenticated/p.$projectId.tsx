@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ArrowLeft, Copy, Download, Lock, Monitor, Smartphone, Tablet, Trash2, ArrowUpToLine, Plus, FileText, PenTool, MessagesSquare, MoreHorizontal, MessageSquarePlus, Crosshair, Layers,
-  Eye, Globe, LayoutTemplate, HelpCircle, Pin, Unlock,
+  Eye, Globe, LayoutTemplate, HelpCircle, Pin, Unlock, UserMinus, PanelLeft, Server, X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,11 @@ import { useDragPrefs } from "@/lib/dragPrefs";
 import { DragSettings } from "@/components/editor/DragSettings";
 import { LockControl } from "@/components/editor/LockControl";
 import type { NodeLock } from "@/lib/useRoom";
-import { SITE_TEMPLATES, type SiteTemplate } from "@/lib/siteTemplates";
+import { SITE_TEMPLATES, templateViews, type SiteTemplate } from "@/lib/siteTemplates";
+import { SitePreview } from "@/components/SitePreview";
+import { openSandboxed, downloadSiteZip } from "@/lib/sandbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { isContainer, type BoxOpts } from "@/lib/blocks";
 
 export const Route = createFileRoute("/_authenticated/p/$projectId")({
   head: () => ({
@@ -154,6 +158,9 @@ function EditorPage() {
   // ---------- canvas ----------
   const [bp, setBp] = useState<Breakpoint>("desktop");
   const [selected, setSelected] = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
+  const [hostOpen, setHostOpen] = useState(false);
   const heldRef = useRef<{ id: string; label: string } | null>(null);
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
   useEffect(() => {
@@ -198,6 +205,7 @@ function EditorPage() {
     heldRef.current = null;
     if (prev) room.release(prev.id, prev.label);
     setSelected(id);
+    if (id && typeof window !== "undefined" && window.innerWidth < 1024) setPanelOpen(true);
     room.setStatus(id ? "editing" : "watching");
     if (!id || readOnly || !prefs.lockOnSelect) return;
     const v = views.find((x) => x.id === id);
@@ -226,6 +234,8 @@ function EditorPage() {
     const extra: Record<string, unknown> = {};
     if (copy) {
       extra["text"] = copy.text; extra["sub"] = copy.sub; extra["label"] = copy.label; extra["href"] = copy.href;
+      extra["attrs"] = copy.attrs; extra["script"] = copy.script;
+      for (const [k, v] of Object.entries(copy.box)) extra[`c.${k}`] = v;
       for (const [k, v] of Object.entries(copy.style)) extra[`s.${k}`] = v;
     }
     await room.op(
@@ -297,8 +307,7 @@ function EditorPage() {
     const data = JSON.stringify(sitePages).replace(/</g, "\\u003c");
     const handler = `<script>var pages=${data};function navigatePage(e){var a=e.target.closest('a[href^="?page="]');if(!a)return;var id=a.getAttribute('href').slice(6);if(pages[id]){e.preventDefault();document.open();document.write(pages[id]);document.close();document.addEventListener('click',navigatePage)}}document.addEventListener('click',navigatePage)</script>`;
     const html = singleHtml().replace('</body>', `${handler}</body>`);
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    window.open(url, "_blank");
+    if (!openSandboxed(html, info?.project?.name ?? "Preview")) toast.error("Allow pop-ups to preview");
   }
   async function publishSite() {
     if (page?.kind !== "canvas") { toast.info("Open the design page you want to publish."); return; }
@@ -362,7 +371,7 @@ function EditorPage() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [page?.kind]);
-  const scale = Math.min(1, (areaW - 64) / BREAKPOINTS[bp].width);
+  const scale = Math.min(1, (areaW - (areaW < 640 ? 24 : 64)) / BREAKPOINTS[bp].width);
 
   function jumpTo(a: Activity) {
     if (!a.node_id) return;
@@ -416,25 +425,18 @@ function EditorPage() {
           </div>
         ) : <span className="mx-auto text-sm text-muted-foreground">{page?.title}</span>}
         <div className="flex items-center gap-1">
-          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden lg:inline">Whiteboard</span></Button>
+          <Button size="sm" variant={page?.kind === "whiteboard" ? "secondary" : "ghost"} onClick={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } else addPage("whiteboard"); }}><PenTool className="size-4" /> <span className="hidden xl:inline">Whiteboard</span></Button>
         </div>
         {page?.kind === "canvas" && !readOnly && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><LayoutTemplate className="size-4" /> <span className="hidden lg:inline">Templates</span></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-              {SITE_TEMPLATES.map((t) => (
-                <DropdownMenuItem key={t.id} onClick={() => applyTemplate(t)} className="flex-col items-start">
-                  <span className="font-medium">{t.name}</span>
-                  <span className="text-xs text-muted-foreground">{t.description}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button size="sm" variant="outline" onClick={() => setTplOpen(true)}><LayoutTemplate className="size-4" /> <span className="hidden xl:inline">Templates</span></Button>
+        )}
+        {page?.kind !== "chat" && (
+          <Button size="sm" variant={panelOpen ? "secondary" : "outline"} className="lg:hidden" onClick={() => setPanelOpen((o) => !o)} aria-label="Toggle settings panel"><PanelLeft className="size-4" /></Button>
         )}
         {page && page.kind !== "chat" && !readOnly && <DragSettings prefs={prefs} onChange={setPrefs} />}
-        <Button size="sm" variant="outline" onClick={previewSite} title="Preview website"><Eye className="size-4" /> <span className="hidden lg:inline">Preview</span></Button>
+        <Button size="sm" variant="outline" onClick={previewSite} title="Preview website"><Eye className="size-4" /> <span className="hidden xl:inline">Preview</span></Button>
         <Popover>
-          <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> <span className="hidden lg:inline">Publish</span></Button></PopoverTrigger>
+          <PopoverTrigger asChild><Button size="sm" disabled={readOnly}><Globe className="size-4" /> <span className="hidden xl:inline">Publish</span></Button></PopoverTrigger>
           <PopoverContent align="end" className="w-80 space-y-3 text-sm">
             <p className="font-medium">Publish your website</p>
             {published ? (
@@ -453,6 +455,9 @@ function EditorPage() {
                 <Button size="sm" onClick={publishSite}>Publish now</Button>
               </>
             )}
+            <div className="border-t pt-3">
+              <Button size="sm" variant="outline" className="w-full" onClick={() => setHostOpen(true)}><Server className="size-4" /> Host on Hostinger, GoDaddy…</Button>
+            </div>
           </PopoverContent>
         </Popover>
         <div className="flex -space-x-2">
@@ -469,8 +474,172 @@ function EditorPage() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Pages + blocks */}
-        <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r bg-sidebar p-3 md:flex">
+        {/* Settings panel (left) */}
+        {page?.kind !== "chat" && (
+        <aside className={`${panelOpen ? "fixed bottom-0 left-0 top-14 z-40 flex shadow-lift" : "hidden"} w-[min(20rem,90vw)] shrink-0 flex-col border-r bg-card lg:static lg:flex lg:w-80 lg:shadow-none ${isMobile ? "!hidden" : ""}`}>
+          <div className="flex items-center justify-end px-2 pt-2 lg:hidden"><Button size="icon" variant="ghost" className="size-7" onClick={() => setPanelOpen(false)} aria-label="Close panel"><X className="size-4" /></Button></div>
+          <Tabs defaultValue="inspect" className="flex min-h-0 flex-1 flex-col">
+            <TabsList className="m-2 grid grid-cols-5">
+              <TabsTrigger value="inspect">Edit</TabsTrigger>
+              <TabsTrigger value="locks" className="gap-1">Locks{Object.keys(room.locks).length > 0 && <span className="rounded-full bg-warning/40 px-1 text-[10px]">{Object.keys(room.locks).length}</span>}</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsTrigger value="code">Code</TabsTrigger>
+              <TabsTrigger value="team">Team</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="locks" className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
+              <p className="px-1 pb-2 text-xs text-muted-foreground">Who locked what. Select any block or whiteboard item, then use the lock buttons in Edit (or on the whiteboard toolbar) to pin or lock it.</p>
+              {Object.values(room.locks).length === 0 && <p className="p-3 text-sm text-muted-foreground">Nothing is locked right now.</p>}
+              <ul className="space-y-1.5">
+                {Object.values(room.locks).map((l) => {
+                  const pr = room.nodes[l.node_id];
+                  const isWb = pr && val<string>(pr, "kind", "") === "wb";
+                  const name = pr ? (isWb ? `Whiteboard ${val<string>(pr, "shape", "item")}` : BLOCKS[val<BlockType>(pr, "type", "text")]?.name ?? "Block") : "Deleted item";
+                  const txt = pr ? (shared.has(`${l.node_id}:text`) ? shared.get(`${l.node_id}:text`) : val<string>(pr, "text", "")) : "";
+                  const locker = members.find((m) => m.id === l.locked_by);
+                  const mine = canOverride(l);
+                  return (
+                    <li key={l.node_id} className="rounded-md border bg-background p-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        {l.mode === "move" ? <Pin className="size-3.5 text-warning" /> : <Lock className="size-3.5 text-destructive" />}
+                        <span className="min-w-0 flex-1 truncate font-medium">{name}{txt ? ` “${txt.slice(0, 22)}”` : ""}</span>
+                        <span className="rounded-full px-1.5 text-[10px] font-medium text-primary-foreground" style={{ background: locker?.color ?? "#78716c" }}>{l.mode === "move" ? "Pinned" : "Locked"}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        By <strong className="text-foreground">{l.locked_by === user.id ? "you" : l.locked_by_name}</strong>
+                        {l.allowed.length > 0 && <> · also allowed: {l.allowed.map(nameOf).join(", ")}</>}
+                        {mine ? " · you can edit" : l.mode === "move" ? " · you can edit text, not move" : " · you can't change it"}
+                      </p>
+                      <div className="mt-1.5 flex gap-1">
+                        {pr && <Button size="sm" variant="ghost" className="h-7" onClick={() => jumpTo({ node_id: l.node_id } as Activity)}><Crosshair className="size-3" /> Show</Button>}
+                        {(l.locked_by === user.id || isOwner) && <Button size="sm" variant="ghost" className="h-7" onClick={() => room.setLock(l.node_id, null, [], name)}><Unlock className="size-3" /> Unlock</Button>}
+                        {!mine && <Button size="sm" variant="ghost" className="h-7" onClick={() => openChat(`@${(locker?.name ?? l.locked_by_name).replace(/\s+/g, "_")} could you unlock ${name}${txt ? ` “${txt.slice(0, 22)}”` : ""}? `)}><MessageSquarePlus className="size-3" /> Ask to unlock</Button>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </TabsContent>
+
+            <TabsContent value="inspect" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+              {page?.kind === "whiteboard" ? (
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <h2 className="text-xl text-foreground">Whiteboard</h2>
+                  <p>Everyone on this page sees your notes, shapes and drawings live. Selecting something locks it for you until you click away.</p>
+                  <p>Double-click a sticky, shape or text to write — several people can type in the same note at once.</p>
+                  <p>Tick the circle on any task to mark it <strong className="text-foreground">Done</strong>; click a task's status to move it along. Undo and redo with Ctrl+Z / Ctrl+Y.</p>
+                  <p>Select an item and use the pin or lock buttons to stop others moving or changing it.</p>
+                  <p>Use <strong className="text-foreground">Plan</strong> for sprint board, user flow, API design, bug triage and retro templates. Vote on stickies with the thumbs-up.</p>
+                  <p>Shortcuts: V select, H pan, K task, S sticky, R process, D decision, O start/end, A connector, C code, I API, T text, F frame, P pen. Ctrl + scroll zooms.</p>
+                </div>
+              ) : sel ? (
+                <>
+                <LockControl key={`lock-${sel.id}-${room.locks[sel.id]?.mode ?? "open"}`} lock={room.locks[sel.id]} myId={user.id} isOwner={isOwner} readOnly={readOnly} members={members}
+                  onSet={(mode, allowed) => room.setLock(sel.id, mode, allowed, labelOf(sel))} />
+                <Inspector
+                  key={sel.id}
+                  node={sel}
+                  bp={bp}
+                  shared={shared}
+                  lockedBy={selLockedBy}
+                  readOnly={readOnly}
+                   onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
+                    onLink={(v) => { if (v && !safeHref(v)) { toast.error("Use a valid website, payment, email, or project page link"); return; } room.op(sel.id, { href: v }, "linked", labelOf(sel)); }}
+                    pages={pages.filter((p) => p.kind === "canvas")}
+                  onStyle={(k, v) => room.op(sel.id, { [`s.${k}`]: v ?? null }, "styled", labelOf(sel))}
+                  onAttrs={(a) => room.op(sel.id, { attrs: a }, "set attributes on", labelOf(sel))}
+                  onScript={(js) => room.op(sel.id, { script: js }, "edited logic of", labelOf(sel))}
+                  onBox={(k, v) => room.op(sel.id, { [`c.${k}`]: v ?? null }, "changed layout of", labelOf(sel))}
+                  onGeo={(g) => commitGeo(sel.id, g, "resized")}
+                  onFront={() => {
+                    const max = views.reduce<string | null>((m, v) => (!m || v.order > m ? v.order : m), null);
+                    room.op(sel.id, { order: keyBetween(max, null) }, "reordered", labelOf(sel));
+                  }}
+                  onDuplicate={() => addBlock(sel.type, undefined, sel)}
+                  onDelete={async () => {
+                    await room.op(sel.id, { deleted: true }, "deleted", labelOf(sel));
+                    select(null);
+                  }}
+                />
+                </>
+              ) : (
+                <>
+                  <ThemePanel theme={theme} readOnly={readOnly} onChange={saveTheme} />
+                  <LayersList views={views} leases={room.leases} session={room.session} onSelect={select} />
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">
+              <p className="px-3 pb-2 text-xs text-muted-foreground">Click an entry to preview what changed.</p>
+              <ul className="space-y-1" aria-live="polite">
+                {room.activity.map((a) => {
+                  const blocked = a.outcome.startsWith("blocked");
+                  return (
+                    <li key={a.id}>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button className={`w-full rounded-md px-3 py-2 text-left text-sm hover:bg-secondary ${blocked ? "bg-destructive/10" : ""}`}>
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span>
+                                <strong className="font-medium">{a.actor_name}</strong>{" "}
+                                <span className="text-muted-foreground">{blocked ? `tried to ${a.action.replace(/ed$/, "")}` : a.action}</span>{" "}
+                                {a.target}
+                              </span>
+                              <time className="shrink-0 text-[10px] text-muted-foreground">
+                                {new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                              </time>
+                            </div>
+                            {blocked && (
+                              <p className="mt-0.5 flex items-center gap-1 text-xs text-destructive">
+                                <Lock className="size-3" /> Blocked{a.detail?.holder ? ` — ${a.detail.holder} is editing it` : " — view-only access"}
+                              </p>
+                            )}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent side="left" className="w-80">
+                          <p className="mb-2 text-sm"><strong>{a.actor_name}</strong> {a.action} {a.target}</p>
+                          <ActivityPreview a={a} props={a.node_id ? room.nodes[a.node_id] : undefined} theme={theme} />
+                          <div className="mt-3 flex gap-2">
+                            {a.node_id && <Button size="sm" variant="outline" onClick={() => jumpTo(a)}><Crosshair className="size-3.5" /> Show</Button>}
+                            {!blocked && (
+                              <Button size="sm" onClick={() => { setAttach(a); openChat(); }}><MessageSquarePlus className="size-3.5" /> Discuss</Button>
+                            )}
+                            {!blocked && (
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setAttach(a);
+                                const who = members.find((m) => m.name === a.actor_name);
+                                openChat(who && who.id !== user.id ? `@${who.name.replace(/\s+/g, "_")} why did you make this change? ` : "Who made this change, and why? ");
+                              }}><HelpCircle className="size-3.5" /> Ask why</Button>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </li>
+                  );
+                })}
+                {room.activity.length === 0 && <p className="p-3 text-sm text-muted-foreground">No activity yet.</p>}
+              </ul>
+            </TabsContent>
+
+            <TabsContent value="code" className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
+                <CodeView exp={exp} pages={sitePages} homeId={firstCanvas} name={`${info?.project?.name ?? "site"}-${page?.title ?? ""}`} />
+            </TabsContent>
+
+            <TabsContent value="team" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
+              <TeamPanel
+                projectId={projectId}
+                isOwner={myRole === "owner"}
+                myId={user.id}
+                members={(info?.members ?? []).map((m) => ({ ...m, profile: info?.profiles.find((p) => p.id === m.user_id) }))}
+                onChanged={() => qc.invalidateQueries({ queryKey: ["project", projectId] })}
+              />
+            </TabsContent>
+          </Tabs>
+        </aside>
+        )}
+        {/* Pages + blocks (right) */}
+        <aside className="order-last hidden w-52 shrink-0 flex-col overflow-y-auto border-l bg-sidebar p-3 md:flex xl:w-56">
           <div className="mb-1 flex items-center justify-between px-1">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pages</p>
             <DropdownMenu>
@@ -565,12 +734,12 @@ function EditorPage() {
             draft={chatDraft} clearDraft={() => setChatDraft("")} wbItems={wbItems}
             onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } }} />
         ) : (
-          <main ref={areaRef} className="min-w-0 flex-1 overflow-auto bg-dotgrid p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
+          <main ref={areaRef} className="min-w-0 flex-1 overflow-auto bg-dotgrid p-3 sm:p-6 lg:p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
             {!room.loaded || !page ? (
               <p className="text-center text-muted-foreground">Loading page…</p>
             ) : (
               <>
-                {views.length === 0 && <p className="mb-4 text-center text-muted-foreground">Blank page — add a Navbar and a Hero from the left to get going.</p>}
+                {views.length === 0 && <p className="mb-4 text-center text-muted-foreground">Blank page — add a Navbar and a Hero from the blocks panel on the right.</p>}
                 <Canvas nodes={views} bp={bp} theme={theme} scale={scale} selected={selected} mySession={room.session} leases={room.leases}
                   cursors={room.cursors} pageId={page.id} drags={room.drags} readOnly={readOnly} prefs={prefs} locks={room.locks} canOverride={canOverride} onSelect={select} onCommit={commitGeo}
                   onLiveDrag={(id, g, done) => room.sendDrag({ id, bp, ...g, done })}
@@ -582,167 +751,70 @@ function EditorPage() {
         )}
         </div>
 
-        {/* Right panel */}
-        {page?.kind !== "chat" && (
-        <aside className="hidden w-80 shrink-0 flex-col border-l bg-card md:flex">
-          <Tabs defaultValue="inspect" className="flex min-h-0 flex-1 flex-col">
-            <TabsList className="m-2 grid grid-cols-5">
-              <TabsTrigger value="inspect">Edit</TabsTrigger>
-              <TabsTrigger value="locks" className="gap-1">Locks{Object.keys(room.locks).length > 0 && <span className="rounded-full bg-warning/40 px-1 text-[10px]">{Object.keys(room.locks).length}</span>}</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-              <TabsTrigger value="code">Code</TabsTrigger>
-              <TabsTrigger value="team">Team</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="locks" className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
-              <p className="px-1 pb-2 text-xs text-muted-foreground">Who locked what. Select any block or whiteboard item, then use the lock buttons in Edit (or on the whiteboard toolbar) to pin or lock it.</p>
-              {Object.values(room.locks).length === 0 && <p className="p-3 text-sm text-muted-foreground">Nothing is locked right now.</p>}
-              <ul className="space-y-1.5">
-                {Object.values(room.locks).map((l) => {
-                  const pr = room.nodes[l.node_id];
-                  const isWb = pr && val<string>(pr, "kind", "") === "wb";
-                  const name = pr ? (isWb ? `Whiteboard ${val<string>(pr, "shape", "item")}` : BLOCKS[val<BlockType>(pr, "type", "text")]?.name ?? "Block") : "Deleted item";
-                  const txt = pr ? (shared.has(`${l.node_id}:text`) ? shared.get(`${l.node_id}:text`) : val<string>(pr, "text", "")) : "";
-                  const locker = members.find((m) => m.id === l.locked_by);
-                  const mine = canOverride(l);
-                  return (
-                    <li key={l.node_id} className="rounded-md border bg-background p-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        {l.mode === "move" ? <Pin className="size-3.5 text-warning" /> : <Lock className="size-3.5 text-destructive" />}
-                        <span className="min-w-0 flex-1 truncate font-medium">{name}{txt ? ` “${txt.slice(0, 22)}”` : ""}</span>
-                        <span className="rounded-full px-1.5 text-[10px] font-medium text-primary-foreground" style={{ background: locker?.color ?? "#78716c" }}>{l.mode === "move" ? "Pinned" : "Locked"}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        By <strong className="text-foreground">{l.locked_by === user.id ? "you" : l.locked_by_name}</strong>
-                        {l.allowed.length > 0 && <> · also allowed: {l.allowed.map(nameOf).join(", ")}</>}
-                        {mine ? " · you can edit" : l.mode === "move" ? " · you can edit text, not move" : " · you can't change it"}
-                      </p>
-                      <div className="mt-1.5 flex gap-1">
-                        {pr && <Button size="sm" variant="ghost" className="h-7" onClick={() => jumpTo({ node_id: l.node_id } as Activity)}><Crosshair className="size-3" /> Show</Button>}
-                        {(l.locked_by === user.id || isOwner) && <Button size="sm" variant="ghost" className="h-7" onClick={() => room.setLock(l.node_id, null, [], name)}><Unlock className="size-3" /> Unlock</Button>}
-                        {!mine && <Button size="sm" variant="ghost" className="h-7" onClick={() => openChat(`@${(locker?.name ?? l.locked_by_name).replace(/\s+/g, "_")} could you unlock ${name}${txt ? ` “${txt.slice(0, 22)}”` : ""}? `)}><MessageSquarePlus className="size-3" /> Ask to unlock</Button>}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </TabsContent>
-
-            <TabsContent value="inspect" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-              {page?.kind === "whiteboard" ? (
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <h2 className="text-xl text-foreground">Whiteboard</h2>
-                  <p>Everyone on this page sees your notes, shapes and drawings live. Selecting something locks it for you until you click away.</p>
-                  <p>Double-click a sticky, shape or text to write — several people can type in the same note at once.</p>
-                  <p><strong className="text-foreground">AI plan</strong> turns a goal into milestones and prioritized tasks on the board for everyone.</p>
-                  <p>Select an item and use the pin or lock buttons to stop others moving or changing it.</p>
-                  <p>Use <strong className="text-foreground">Plan</strong> for kanban, timeline, priority matrix, SWOT and retro templates. Vote on stickies with the thumbs-up.</p>
-                  <p>Shortcuts: V select, H pan, S sticky, R rectangle, O ellipse, T text, L line, A arrow, P pen, F frame. Ctrl + scroll zooms.</p>
-                </div>
-              ) : sel ? (
-                <>
-                <LockControl key={`lock-${sel.id}-${room.locks[sel.id]?.mode ?? "open"}`} lock={room.locks[sel.id]} myId={user.id} isOwner={isOwner} readOnly={readOnly} members={members}
-                  onSet={(mode, allowed) => room.setLock(sel.id, mode, allowed, labelOf(sel))} />
-                <Inspector
-                  key={sel.id}
-                  node={sel}
-                  bp={bp}
-                  shared={shared}
-                  lockedBy={selLockedBy}
-                  readOnly={readOnly}
-                   onEdit={(f, v) => room.op(sel.id, { [f]: v }, "edited", labelOf(sel))}
-                    onLink={(v) => { if (v && !safeHref(v)) { toast.error("Use a valid website, payment, email, or project page link"); return; } room.op(sel.id, { href: v }, "linked", labelOf(sel)); }}
-                    pages={pages.filter((p) => p.kind === "canvas")}
-                  onStyle={(k, v) => room.op(sel.id, { [`s.${k}`]: v ?? null }, "styled", labelOf(sel))}
-                  onGeo={(g) => commitGeo(sel.id, g, "resized")}
-                  onFront={() => {
-                    const max = views.reduce<string | null>((m, v) => (!m || v.order > m ? v.order : m), null);
-                    room.op(sel.id, { order: keyBetween(max, null) }, "reordered", labelOf(sel));
-                  }}
-                  onDuplicate={() => addBlock(sel.type, undefined, sel)}
-                  onDelete={async () => {
-                    await room.op(sel.id, { deleted: true }, "deleted", labelOf(sel));
-                    select(null);
-                  }}
-                />
-                </>
-              ) : (
-                <>
-                  <ThemePanel theme={theme} readOnly={readOnly} onChange={saveTheme} />
-                  <LayersList views={views} leases={room.leases} session={room.session} onSelect={select} />
-                </>
-              )}
-            </TabsContent>
-
-            <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">
-              <p className="px-3 pb-2 text-xs text-muted-foreground">Click an entry to preview what changed.</p>
-              <ul className="space-y-1" aria-live="polite">
-                {room.activity.map((a) => {
-                  const blocked = a.outcome.startsWith("blocked");
-                  return (
-                    <li key={a.id}>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <button className={`w-full rounded-md px-3 py-2 text-left text-sm hover:bg-secondary ${blocked ? "bg-destructive/10" : ""}`}>
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span>
-                                <strong className="font-medium">{a.actor_name}</strong>{" "}
-                                <span className="text-muted-foreground">{blocked ? `tried to ${a.action.replace(/ed$/, "")}` : a.action}</span>{" "}
-                                {a.target}
-                              </span>
-                              <time className="shrink-0 text-[10px] text-muted-foreground">
-                                {new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                              </time>
-                            </div>
-                            {blocked && (
-                              <p className="mt-0.5 flex items-center gap-1 text-xs text-destructive">
-                                <Lock className="size-3" /> Blocked{a.detail?.holder ? ` — ${a.detail.holder} is editing it` : " — view-only access"}
-                              </p>
-                            )}
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent side="left" className="w-80">
-                          <p className="mb-2 text-sm"><strong>{a.actor_name}</strong> {a.action} {a.target}</p>
-                          <ActivityPreview a={a} props={a.node_id ? room.nodes[a.node_id] : undefined} theme={theme} />
-                          <div className="mt-3 flex gap-2">
-                            {a.node_id && <Button size="sm" variant="outline" onClick={() => jumpTo(a)}><Crosshair className="size-3.5" /> Show</Button>}
-                            {!blocked && (
-                              <Button size="sm" onClick={() => { setAttach(a); openChat(); }}><MessageSquarePlus className="size-3.5" /> Discuss</Button>
-                            )}
-                            {!blocked && (
-                              <Button size="sm" variant="outline" onClick={() => {
-                                setAttach(a);
-                                const who = members.find((m) => m.name === a.actor_name);
-                                openChat(who && who.id !== user.id ? `@${who.name.replace(/\s+/g, "_")} why did you make this change? ` : "Who made this change, and why? ");
-                              }}><HelpCircle className="size-3.5" /> Ask why</Button>
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    </li>
-                  );
-                })}
-                {room.activity.length === 0 && <p className="p-3 text-sm text-muted-foreground">No activity yet.</p>}
-              </ul>
-            </TabsContent>
-
-            <TabsContent value="code" className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-                <CodeView exp={exp} pages={sitePages} name={`${info?.project?.name ?? "site"}-${page?.title ?? ""}`} />
-            </TabsContent>
-
-            <TabsContent value="team" className="min-h-0 flex-1 overflow-y-auto px-4 pb-6">
-              <TeamPanel
-                projectId={projectId}
-                isOwner={myRole === "owner"}
-                members={(info?.members ?? []).map((m) => ({ ...m, profile: info?.profiles.find((p) => p.id === m.user_id) }))}
-                onChanged={() => qc.invalidateQueries({ queryKey: ["project", projectId] })}
-              />
-            </TabsContent>
-          </Tabs>
-        </aside>
-        )}
       </div>
+
+      <Dialog open={tplOpen} onOpenChange={setTplOpen}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Website templates</DialogTitle><DialogDescription>Pick a design to add to this page. You can change everything afterwards.</DialogDescription></DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {SITE_TEMPLATES.map((t) => (
+              <button key={t.id} onClick={() => { setTplOpen(false); applyTemplate(t); }} className="overflow-hidden rounded-lg border text-left transition hover:border-primary hover:shadow-lift">
+                <SitePreview nodes={templateViews(t)} theme={theme} height={170} className="border-b" />
+                <span className="block p-3"><span className="block font-medium">{t.name}</span><span className="text-xs text-muted-foreground">{t.description}</span></span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <HostingDialog open={hostOpen} onOpenChange={setHostOpen} siteUrl={siteUrl} published={!!published}
+        onZip={(host) => downloadSiteZip(sitePages, firstCanvas, info?.project?.name ?? "site", host)} />
     </div>
+  );
+}
+
+const HOSTS = {
+  Hostinger: { upload: ["Log in to hPanel and open Websites → Manage.", "Open File Manager and go into the public_html folder.", "Delete the default index.php or default.php file if there is one.", "Upload the ZIP, right-click it and choose Extract, then delete the ZIP."], forward: ["In hPanel open Domains → your domain → Redirects (or Domain forwarding).", "Choose a permanent (301) redirect and paste your published link.", "Save. It can take up to a few hours to take effect."] },
+  GoDaddy: { upload: ["Open My Products → Web Hosting → Manage → cPanel Admin.", "Open File Manager → public_html.", "Upload the ZIP, select it and choose Extract.", "Remove any old index files that came with the hosting."], forward: ["Open My Products → Domains → your domain → DNS → Forwarding.", "Add forwarding to your published link, type Permanent (301).", "Save. GoDaddy says it can take up to 48 hours."] },
+  Namecheap: { upload: ["Open Hosting List → Go to cPanel.", "Open File Manager → public_html.", "Upload the ZIP and Extract it there."], forward: ["Open Domain List → Manage → Redirect Domain.", "Add a redirect from your domain to your published link.", "Save. Changes can take about 30 minutes."] },
+  "Other host": { upload: ["Open your host's file manager or connect by FTP.", "Go to the website root (often public_html, www or htdocs).", "Upload and extract the ZIP so index.html sits in the root."], forward: ["Find Domain forwarding / Redirects in your domain settings.", "Point your domain to your published link with a permanent (301) redirect."] },
+} as const;
+
+function HostingDialog({ open, onOpenChange, siteUrl, published, onZip }: { open: boolean; onOpenChange: (o: boolean) => void; siteUrl: string; published: boolean; onZip: (host: string) => void }) {
+  const [host, setHost] = useState<keyof typeof HOSTS>("Hostinger");
+  const h = HOSTS[host];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Put your site on your own hosting</DialogTitle>
+          <DialogDescription>Hosting companies don't let other apps upload for you, so here are the two quickest ways, step by step.</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-wrap gap-1">
+          {(Object.keys(HOSTS) as (keyof typeof HOSTS)[]).map((k) => (
+            <Button key={k} size="sm" variant={host === k ? "default" : "outline"} onClick={() => setHost(k)}>{k}</Button>
+          ))}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="rounded-lg border p-4">
+            <h3 className="font-medium">Option 1 · Upload the files</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Your site runs on your {host} hosting. Re-upload after changes.</p>
+            <Button size="sm" className="mt-3" onClick={() => onZip(host)}><Download className="size-4" /> Download upload-ready ZIP</Button>
+            <ol className="mt-3 list-decimal space-y-1 pl-4 text-sm">{h.upload.map((x) => <li key={x}>{x}</li>)}</ol>
+          </section>
+          <section className="rounded-lg border p-4">
+            <h3 className="font-medium">Option 2 · Forward your domain</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Your domain sends visitors to your WebCraft site, which updates when you publish.</p>
+            {published ? (
+              <div className="mt-3 flex items-center gap-1">
+                <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{siteUrl}</code>
+                <Button size="icon" variant="outline" className="size-7" aria-label="Copy link" onClick={() => { navigator.clipboard.writeText(siteUrl); toast.success("Link copied"); }}><Copy className="size-3.5" /></Button>
+              </div>
+            ) : <p className="mt-3 rounded bg-warning/15 p-2 text-xs">Publish the site first to get your link.</p>}
+            <ol className="mt-3 list-decimal space-y-1 pl-4 text-sm">{h.forward.map((x) => <li key={x}>{x}</li>)}</ol>
+          </section>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -760,6 +832,12 @@ function BlockGlyph({ type }: { type: BlockType }) {
     case "image": return <div className={box}><div className="h-full rounded-sm bg-accent/60" /></div>;
     case "cards": case "pricing": return <div className={`${box} flex-row items-stretch`}>{[0, 1, 2].map((i) => <div key={i} className="flex-1 rounded-[1px] border" />)}</div>;
     case "login": case "register": return <div className={`${box} items-center`}>{[0, 1].map((i) => <div key={i} className="h-1 w-5 rounded-[1px] border" />)}<div className="h-1 w-5 rounded-full bg-primary" /></div>;
+    case "input": return <div className={box}><div className={`${bar} h-0.5 w-4`} /><div className="h-2 w-9 rounded-[2px] border bg-card" /></div>;
+    case "flex": return <div className={`${box} flex-row items-center gap-0.5`}>{[0, 1, 2].map((i) => <div key={i} className="h-3 flex-1 rounded-[1px] bg-primary/30" />)}</div>;
+    case "grid": return <div className={`${box} grid grid-cols-3 gap-0.5`}>{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-1.5 rounded-[1px] bg-primary/30" />)}</div>;
+    case "stack": return <div className={`${box} gap-0.5`}>{[0, 1, 2].map((i) => <div key={i} className="h-1 w-full rounded-[1px] bg-primary/30" />)}</div>;
+    case "absolute": return <div className={`${box} relative`}><div className="absolute left-1 top-1 h-3 w-5 rounded-[1px] bg-primary/25" /><div className="absolute left-3 top-2.5 h-3 w-5 rounded-[1px] bg-primary/50" /></div>;
+    case "section": return <div className={`${box} bg-accent/20`}><div className={`${bar} h-1 w-6`} /><div className={`${bar} h-0.5 w-8`} /></div>;
     case "divider": return <div className={box}><div className="h-px w-full bg-muted-foreground/60" /></div>;
     default: return <div className={box}><div className={`${bar} h-1 w-8`} /><div className={`${bar} h-1 w-6`} /></div>;
   }
@@ -802,6 +880,9 @@ function Inspector(props: {
   onLink: (v: string) => void;
   pages: Page[];
   onStyle: (k: keyof BlockStyle, v: unknown) => void;
+  onAttrs: (a: Record<string, string>) => void;
+  onScript: (js: string) => void;
+  onBox: (k: keyof BoxOpts, v: unknown) => void;
   onGeo: (g: Geo) => void;
   onFront: () => void;
   onDuplicate: () => void;
@@ -813,8 +894,8 @@ function Inspector(props: {
   const st = node.style;
   const disabled = props.readOnly || !!props.lockedBy;
   const fields: { f: "text" | "sub" | "label"; label: string }[] = [];
-  if (def.text) fields.push({ f: "text", label: node.type === "image" ? "Alt text / caption" : node.type === "cards" || node.type === "pricing" ? "Titles (separate with |)" : "Text" });
-  if (def.sub) fields.push({ f: "sub", label: node.type === "pricing" ? "Prices (separate with |)" : node.type === "cards" ? "Descriptions (separate with |)" : "Secondary text" });
+  if (def.text) fields.push({ f: "text", label: node.type === "image" ? "Alt text / caption" : node.type === "cards" || node.type === "pricing" ? "Titles (separate with |)" : node.type === "input" ? "Field label" : isContainer(node.type) && node.type !== "section" ? "Items (separate with |)" : "Text" });
+  if (def.sub) fields.push({ f: "sub", label: node.type === "pricing" ? "Prices (separate with |)" : node.type === "cards" ? "Descriptions (separate with |)" : node.type === "input" ? "Placeholder" : "Secondary text" });
   if (def.label) fields.push({ f: "label", label: "Button label" });
 
   const color = (k: "bg" | "color" | "btn" | "border", label: string) => (
@@ -876,6 +957,11 @@ function Inspector(props: {
           <p className="text-xs text-muted-foreground">Paste your payment provider's checkout link, or select a project page. Sign-in and sign-up blocks also need a destination; they do not create user accounts.</p>
         </div>
       )}
+      {isContainer(node.type) && node.type !== "section" && (
+        <BoxPanel type={node.type} box={node.box} disabled={disabled} onBox={props.onBox} />
+      )}
+      <AttrsPanel key={`attrs-${node.id}`} node={node} disabled={disabled} onAttrs={props.onAttrs} />
+      <LogicPanel key={`js-${node.id}-${node.script.length}`} node={node} disabled={disabled} onScript={props.onScript} />
       <div className="space-y-3">
         <Label className="block">Style</Label>
         {color("bg", "Background")}
@@ -955,7 +1041,7 @@ function ThemePanel({ theme, readOnly, onChange }: { theme: Theme; readOnly: boo
   );
 }
 
-function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: string }; pages: Record<string, string>; name: string }) {
+function CodeView({ exp, pages, name, homeId }: { exp: { html: string; css: string; js: string }; pages: Record<string, string>; name: string; homeId: string | null }) {
   const [edits, setEdits] = useState<Record<string, string>>({});
   const base: Record<string, string> = { "index.html": exp.html, "styles.css": exp.css, "script.js": exp.js };
   const files = Object.keys(base).map((k) => ({ k, v: edits[k] ?? base[k]!, edited: k in edits }));
@@ -970,9 +1056,7 @@ function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: 
     return html;
   };
   function preview() {
-    const w = window.open("", "_blank");
-    if (!w) { toast.error("Allow pop-ups to preview"); return; }
-    w.document.open(); w.document.write(combined()); w.document.close();
+    if (!openSandboxed(combined())) toast.error("Allow pop-ups to preview");
   }
   async function zip() {
     const JSZip = (await import("jszip")).default;
@@ -1039,6 +1123,7 @@ function CodeView({ exp, pages, name }: { exp: { html: string; css: string; js: 
 function TeamPanel(props: {
   projectId: string;
   isOwner: boolean;
+  myId: string;
   members: { user_id: string; role: string; profile?: { display_name: string; color: string } | undefined }[];
   onChanged: () => void;
 }) {
@@ -1066,6 +1151,14 @@ function TeamPanel(props: {
             </span>
             <span className="flex-1">{m.profile?.display_name ?? "Member"}</span>
             <span className="text-xs capitalize text-muted-foreground">{m.role}</span>
+            {props.isOwner && m.role !== "owner" && m.user_id !== props.myId && (
+              <Button size="icon" variant="ghost" className="size-7 text-destructive" aria-label={`Remove ${m.profile?.display_name ?? "member"}`} title="Remove from project"
+                onClick={async () => {
+                  if (!window.confirm(`Remove ${m.profile?.display_name ?? "this member"} from the project? They'll lose access right away.`)) return;
+                  const { error } = await supabase.from("project_members").delete().eq("project_id", props.projectId).eq("user_id", m.user_id);
+                  if (error) toast.error("Couldn't remove member"); else { toast.success("Member removed"); props.onChanged(); }
+                }}><UserMinus className="size-3.5" /></Button>
+            )}
           </li>
         ))}
       </ul>
@@ -1082,6 +1175,112 @@ function TeamPanel(props: {
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+const SNIPPETS: { name: string; code: string }[] = [
+  { name: "Required field", code: `input.required = true;\ninput.addEventListener("blur", () => {\n  el.querySelector(".wc-field-msg").textContent = input.value.trim() ? "" : "This field is required";\n});` },
+  { name: "Email check", code: `input.addEventListener("input", () => {\n  const ok = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(input.value);\n  input.setCustomValidity(ok ? "" : "Enter a valid email");\n  el.querySelector(".wc-field-msg").textContent = ok || !input.value ? "" : "Enter a valid email";\n});` },
+  { name: "Min length", code: `input.addEventListener("input", () => {\n  const short = input.value.length > 0 && input.value.length < 8;\n  el.querySelector(".wc-field-msg").textContent = short ? "Use at least 8 characters" : "";\n});` },
+  { name: "Click message", code: `el.addEventListener("click", () => {\n  alert("Thanks for clicking!");\n});` },
+  { name: "Save to browser", code: `input.value = localStorage.getItem(input.name) || "";\ninput.addEventListener("input", () => localStorage.setItem(input.name, input.value));` },
+];
+
+function AttrsPanel({ node, disabled, onAttrs }: { node: NodeView; disabled: boolean; onAttrs: (a: Record<string, string>) => void }) {
+  const [rows, setRows] = useState<[string, string][]>(() => Object.entries(node.attrs));
+  const commit = (r: [string, string][]) => {
+    const o: Record<string, string> = {};
+    for (const [k, v] of r) if (k.trim()) o[k.trim()] = v;
+    if (JSON.stringify(o) !== JSON.stringify(node.attrs)) onAttrs(o);
+  };
+  const presets = node.type === "input"
+    ? [["type", "email"], ["name", "email"], ["required", ""], ["minlength", "8"], ["maxlength", "120"], ["pattern", "[A-Za-z ]+"], ["autocomplete", "email"]]
+    : [["aria-label", ""], ["title", ""], ["data-track", "cta"], ["role", "region"]];
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <Label>Attributes</Label>
+      <p className="text-xs text-muted-foreground">{node.type === "input" ? "Set the input type, name, required, length limits or a pattern." : "Added to this block's element in the published site."} Event handlers go in Logic below.</p>
+      {rows.map(([k, v], i) => (
+        <div key={i} className="flex gap-1">
+          <Input aria-label="Attribute name" disabled={disabled} value={k} placeholder="name" className="h-8 flex-1 font-mono text-xs"
+            onChange={(e) => setRows((r) => r.map((x, j) => (j === i ? [e.target.value, x[1]] : x)))} onBlur={() => commit(rows)} />
+          <Input aria-label="Attribute value" disabled={disabled} value={v} placeholder="value" className="h-8 flex-1 font-mono text-xs"
+            onChange={(e) => setRows((r) => r.map((x, j) => (j === i ? [x[0], e.target.value] : x)))} onBlur={() => commit(rows)} />
+          <Button size="icon" variant="ghost" className="size-8" disabled={disabled} aria-label="Remove attribute" onClick={() => { const r = rows.filter((_, j) => j !== i); setRows(r); commit(r); }}><X className="size-3.5" /></Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-1">
+        {presets.filter(([k]) => !rows.some(([x]) => x === k)).map(([k, v]) => (
+          <button key={k} disabled={disabled} onClick={() => { const r: [string, string][] = [...rows, [k!, v!]]; setRows(r); commit(r); }}
+            className="rounded-full border px-2 py-0.5 font-mono text-[10px] hover:border-primary disabled:opacity-50">+ {k}</button>
+        ))}
+        <button disabled={disabled} onClick={() => setRows((r) => [...r, ["", ""]])} className="rounded-full border border-dashed px-2 py-0.5 text-[10px] hover:border-primary">+ custom</button>
+      </div>
+    </div>
+  );
+}
+
+function LogicPanel({ node, disabled, onScript }: { node: NodeView; disabled: boolean; onScript: (js: string) => void }) {
+  const [code, setCode] = useState(node.script);
+  const save = (v: string) => { if (v !== node.script) onScript(v); };
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <Label>Logic (JavaScript)</Label>
+      <p className="text-xs text-muted-foreground">Runs on the live site. Use <code className="font-mono">el</code> for this block{node.type === "input" ? <> and <code className="font-mono">input</code> for the field</> : null}. It also appears in the script.js tab.</p>
+      <div className="flex flex-wrap gap-1">
+        {SNIPPETS.filter((x) => node.type === "input" || !x.code.includes("input.")).map((x) => (
+          <button key={x.name} disabled={disabled} onClick={() => { const v = code ? `${code}\n\n${x.code}` : x.code; setCode(v); save(v); }}
+            className="rounded-full border px-2 py-0.5 text-[10px] hover:border-primary disabled:opacity-50">+ {x.name}</button>
+        ))}
+      </div>
+      <textarea value={code} disabled={disabled} spellCheck={false} rows={7} aria-label="Block logic"
+        placeholder={node.type === "input" ? 'input.addEventListener("input", () => {\n  // check input.value\n});' : 'el.addEventListener("click", () => {\n  // do something\n});'}
+        onChange={(e) => setCode(e.target.value)} onBlur={() => save(code)}
+        onKeyDown={(e) => {
+          if (e.key !== "Tab") return;
+          e.preventDefault();
+          const t = e.currentTarget, a = t.selectionStart, b = t.selectionEnd;
+          const v = code.slice(0, a) + "  " + code.slice(b);
+          setCode(v); requestAnimationFrame(() => t.setSelectionRange(a + 2, a + 2));
+        }}
+        className="w-full resize-y rounded-md bg-ink p-2 font-mono text-[11px] leading-relaxed text-paper outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60" />
+    </div>
+  );
+}
+
+function BoxPanel({ type, box, disabled, onBox }: { type: BlockType; box: BoxOpts; disabled: boolean; onBox: (k: keyof BoxOpts, v: unknown) => void }) {
+  const seg = <K extends keyof BoxOpts>(k: K, label: string, opts: readonly string[], dflt: string) => (
+    <div className="flex items-center justify-between gap-2 text-xs">
+      {label}
+      <div className="flex flex-wrap rounded-md border p-0.5">
+        {opts.map((o) => (
+          <button key={o} disabled={disabled} onClick={() => onBox(k, o === dflt ? null : o)}
+            className={`rounded px-1.5 py-0.5 capitalize ${(box[k] ?? dflt) === o ? "bg-secondary font-medium" : "text-muted-foreground"}`}>{o}</button>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <div className="space-y-2.5 border-t pt-4">
+      <Label className="block">Container layout</Label>
+      {type !== "absolute" && (
+        <label className="block text-xs"><span className="flex justify-between">Gap<span className="text-muted-foreground">{box.gap ?? 16}px</span></span>
+          <input type="range" min={0} max={64} step={2} disabled={disabled} defaultValue={box.gap ?? 16} key={String(box.gap)} onPointerUp={(e) => onBox("gap", Number((e.target as HTMLInputElement).value))} className="mt-1 w-full accent-[var(--primary)]" />
+        </label>
+      )}
+      {type === "grid" && (
+        <label className="block text-xs"><span className="flex justify-between">Columns<span className="text-muted-foreground">{box.cols ?? 3}</span></span>
+          <input type="range" min={1} max={6} step={1} disabled={disabled} defaultValue={box.cols ?? 3} key={String(box.cols)} onPointerUp={(e) => onBox("cols", Number((e.target as HTMLInputElement).value))} className="mt-1 w-full accent-[var(--primary)]" />
+        </label>
+      )}
+      {type === "flex" && seg("dir", "Direction", ["row", "column"], "row")}
+      {(type === "flex" || type === "stack") && seg("justify", "Justify", ["start", "center", "end", "between"], "start")}
+      {type !== "absolute" && seg("align", "Align", ["start", "center", "end", "stretch"], "stretch")}
+      {type === "flex" && (
+        <label className="flex items-center justify-between text-xs">Wrap items<Switch checked={!!box.wrap} disabled={disabled} onCheckedChange={(c) => onBox("wrap", c || null)} /></label>
+      )}
+      {type === "absolute" && <p className="text-xs text-muted-foreground">Layers overlap freely, each offset from the last — good for collages and stacked cards.</p>}
     </div>
   );
 }
