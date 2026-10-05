@@ -101,7 +101,7 @@ function Projects() {
           {[{ id: "", name: "Blank page", description: "An empty canvas." }, ...SITE_TEMPLATES].map((t) => (
             <button key={t.id || "blank"} type="button" onClick={() => setTpl(t.id)}
               className={`overflow-hidden rounded-lg border text-left text-sm transition ${tpl === t.id ? "border-primary ring-2 ring-primary" : "bg-card hover:border-foreground/30"}`}>
-              <SitePreview nodes={"blocks" in t ? templateViews(t) : []} height={110} className="border-b" />
+              <SitePreview nodes={"blocks" in t ? templateViews(t) : []} theme={"theme" in t ? t.theme : DEFAULT_THEME} height={130} className="border-b" />
               <span className="block p-2.5"><span className="block font-medium">{t.name}</span>
               <span className="text-xs text-muted-foreground">{t.description}</span></span>
             </button>
