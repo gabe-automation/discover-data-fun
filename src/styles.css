@@ -128,6 +128,14 @@
   background-image: radial-gradient(var(--grid) 1px, transparent 1px);
   background-size: 20px 20px;
 }
+@utility editor-gradient {
+  background-color: var(--canvas);
+  background-image:
+    linear-gradient(145deg, color-mix(in oklab, var(--primary) 8%, transparent), transparent 42%),
+    linear-gradient(325deg, color-mix(in oklab, var(--accent) 9%, transparent), transparent 48%),
+    radial-gradient(var(--grid) 1px, transparent 1px);
+  background-size: auto, auto, 20px 20px;
+}
 @utility paper-grain {
   background-image:
     radial-gradient(circle at 20% 10%, oklch(0.56 0.15 42 / 0.08), transparent 45%),

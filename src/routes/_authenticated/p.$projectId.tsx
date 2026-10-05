@@ -336,11 +336,16 @@ function EditorPage() {
         type: b.type, parent: null, page: page.id, order, deleted: false,
         "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
         text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "",
+        ...Object.fromEntries(Object.entries(b.style ?? {}).map(([k, v]) => [`s.${k}`, v])),
+        ...Object.fromEntries(Object.entries(b.box ?? {}).map(([k, v]) => [`c.${k}`, v])),
       }, "created", `${def.name} (${t.name} template)`);
     });
     const results = await Promise.all(jobs);
     if (results.some((r) => r !== "applied" && r !== "duplicate")) toast.error("Some template blocks could not be added");
-    else toast.success(`${t.name} template added`);
+    else {
+      if (!views.length) await saveTheme(t.theme);
+      toast.success(`${t.name} template added`);
+    }
   }
   // Apply a template picked on the projects screen, once the first page is ready.
   useEffect(() => {
@@ -734,7 +739,7 @@ function EditorPage() {
             draft={chatDraft} clearDraft={() => setChatDraft("")} wbItems={wbItems}
             onOpenWb={() => { const w = pages.find((x) => x.kind === "whiteboard"); if (w) { setPageId(w.id); setChatOpen(false); } }} />
         ) : (
-          <main ref={areaRef} className="min-w-0 flex-1 overflow-auto bg-dotgrid p-3 sm:p-6 lg:p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
+          <main ref={areaRef} className="editor-gradient min-w-0 flex-1 overflow-auto p-3 sm:p-6 lg:p-8" onMouseLeave={() => room.setStatus(selected ? "editing" : "idle")}>
             {!room.loaded || !page ? (
               <p className="text-center text-muted-foreground">Loading page…</p>
             ) : (
@@ -759,7 +764,7 @@ function EditorPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             {SITE_TEMPLATES.map((t) => (
               <button key={t.id} onClick={() => { setTplOpen(false); applyTemplate(t); }} className="overflow-hidden rounded-lg border text-left transition hover:border-primary hover:shadow-lift">
-                <SitePreview nodes={templateViews(t)} theme={theme} height={170} className="border-b" />
+                <SitePreview nodes={templateViews(t)} theme={t.theme} height={190} className="border-b" />
                 <span className="block p-3"><span className="block font-medium">{t.name}</span><span className="text-xs text-muted-foreground">{t.description}</span></span>
               </button>
             ))}
@@ -787,7 +792,7 @@ function HostingDialog({ open, onOpenChange, siteUrl, published, onZip }: { open
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Put your site on your own hosting</DialogTitle>
-          <DialogDescription>Hosting companies don't let other apps upload for you, so here are the two quickest ways, step by step.</DialogDescription>
+          <DialogDescription>Your download is already configured for static hosting. Choose a provider for the exact upload or domain steps.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-1">
           {(Object.keys(HOSTS) as (keyof typeof HOSTS)[]).map((k) => (
@@ -798,12 +803,12 @@ function HostingDialog({ open, onOpenChange, siteUrl, published, onZip }: { open
           <section className="rounded-lg border p-4">
             <h3 className="font-medium">Option 1 · Upload the files</h3>
             <p className="mt-1 text-xs text-muted-foreground">Your site runs on your {host} hosting. Re-upload after changes.</p>
-            <Button size="sm" className="mt-3" onClick={() => onZip(host)}><Download className="size-4" /> Download upload-ready ZIP</Button>
+            <Button size="sm" className="mt-3" onClick={() => onZip(host)}><Download className="size-4" /> Download preconfigured ZIP</Button>
             <ol className="mt-3 list-decimal space-y-1 pl-4 text-sm">{h.upload.map((x) => <li key={x}>{x}</li>)}</ol>
           </section>
           <section className="rounded-lg border p-4">
             <h3 className="font-medium">Option 2 · Forward your domain</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Your domain sends visitors to your WebCraft site, which updates when you publish.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Your WebCraft address is already live-ready. Your domain provider still requires you to approve the forwarding change.</p>
             {published ? (
               <div className="mt-3 flex items-center gap-1">
                 <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-xs">{siteUrl}</code>

@@ -16,7 +16,8 @@ export async function downloadSiteZip(pages: Record<string, string>, homeId: str
   const fix = (h: string) => h.replace(/\?page=([0-9a-f-]{36})/gi, (_, id: string) => (id === homeId ? "index.html" : `page-${id}.html`));
   for (const [id, html] of Object.entries(pages)) z.file(id === homeId ? "index.html" : `page-${id}.html`, fix(html));
   z.file(".htaccess", "DirectoryIndex index.html\nOptions -Indexes\n");
-  z.file("README.txt", `Upload every file in this folder${host ? ` to your ${host}` : ""} website root (usually public_html).\nindex.html is your home page.\n`);
+  z.file("404.html", "<!doctype html><meta charset=\"utf-8\"><title>Page not found</title><main style=\"font:16px system-ui;padding:3rem\"><h1>Page not found</h1><p><a href=\"index.html\">Return home</a></p></main>");
+  z.file("README.txt", `PRECONFIGURED WEBCRAFT SITE\n\nThis package is ready for ${host ?? "standard static"} hosting. No build command or code setup is needed.\n\n1. Upload every file in this folder to your website root (usually public_html).\n2. Keep index.html, .htaccess and the page-*.html files together.\n3. Open your domain and confirm the home page and page links work.\n\nTo update the site later, download a fresh package and replace these files.\n`);
   const blob = await z.generateAsync({ type: "blob" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
