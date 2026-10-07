@@ -10,6 +10,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { WorkspaceShell, TemplateGallery } from "@/components/WorkspaceGallery";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ArrowUpRight, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/projects")({
   head: () => ({
@@ -39,8 +42,7 @@ function Projects() {
         .eq("user_id", u.user?.id ?? "");
       if (error) throw error;
       return (data ?? [])
-        .filter((r) => r.projects)
-        .map((r) => ({ role: r.role, ...r.projects! }))
+        .flatMap((r) => r.projects ? [{ role: r.role, ...r.projects }] : [])
         .sort((a, b) => b.created_at.localeCompare(a.created_at));
     },
   });
@@ -70,11 +72,20 @@ function Projects() {
     },
   });
   const [tpl, setTpl] = useState("");
+  const [section, setSection] = useState("Projects");
+  const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const filtered = (projects ?? []).filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
+  const featured = filtered[0];
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (!name.trim() || busy) return;
+    setBusy(true);
     const { data, error } = await supabase.rpc("create_project", { _name: name });
     if (error || !data) {
+      setBusy(false);
       toast.error("Couldn't create project");
       return;
     }
@@ -84,48 +95,28 @@ function Projects() {
     navigate({ to: "/p/$projectId", params: { projectId: data } });
   }
 
-  return (
-    <div className="min-h-screen paper-grain">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-6 sm:px-6">
-        <Link to="/" className="font-display text-2xl">WebCraft</Link>
-        <Button variant="ghost" onClick={() => supabase.auth.signOut().then(() => navigate({ to: "/" }))}>Sign out</Button>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
-        <h1 className="mt-6 text-4xl sm:mt-10 sm:text-5xl">Your projects</h1>
-        <form onSubmit={create} className="mt-8 flex max-w-lg gap-2">
-          <Input placeholder="New site name, e.g. Studio North" value={name} onChange={(e) => setName(e.target.value)} />
-          <Button type="submit">Create</Button>
-        </form>
-        <p className="mt-6 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Start from</p>
-        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {[{ id: "", name: "Blank page", description: "An empty canvas." }, ...SITE_TEMPLATES].map((t) => (
-            <button key={t.id || "blank"} type="button" onClick={() => setTpl(t.id)}
-              className={`overflow-hidden rounded-lg border text-left text-sm transition ${tpl === t.id ? "border-primary ring-2 ring-primary" : "bg-card hover:border-foreground/30"}`}>
-              <SitePreview nodes={"blocks" in t ? templateViews(t) : []} theme={"theme" in t ? t.theme : DEFAULT_THEME} height={130} className="border-b" />
-              <span className="block p-2.5"><span className="block font-medium">{t.name}</span>
-              <span className="text-xs text-muted-foreground">{t.description}</span></span>
-            </button>
-          ))}
-        </div>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {isLoading && <p className="text-muted-foreground">Loading…</p>}
-          {projects?.length === 0 && <p className="text-muted-foreground">No projects yet — create your first one above.</p>}
-          {projects?.map((p) => (
-            <Link
-              key={p.id}
-              to="/p/$projectId"
-              params={{ projectId: p.id }}
-              className="group overflow-hidden rounded-xl border bg-card shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift"
-            >
-              {thumbs ? <SitePreview nodes={thumbs[p.id]?.nodes ?? []} theme={thumbs[p.id]?.theme ?? DEFAULT_THEME} height={180} className="border-b" /> : <div className="h-[180px] animate-pulse border-b bg-muted" />}
-              <div className="p-4">
-                <h2 className="truncate text-xl group-hover:text-primary">{p.name}</h2>
-                <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{p.role}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </main>
+  return <WorkspaceShell signedIn section={section} onSection={setSection} search={search} onSearch={setSearch}
+    onSignOut={() => supabase.auth.signOut().then(() => navigate({ to: "/" }))}>
+    <div className="mb-8 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4">
+      <h1 className="text-3xl font-semibold">{section}</h1>
+      <Button onClick={() => { setTpl(sessionStorage.getItem("webcraft:pending-template") ?? ""); sessionStorage.removeItem("webcraft:pending-template"); setCreating(true); }}><Plus className="size-4"/><span className="hidden sm:inline">New project</span></Button>
     </div>
-  );
+    {section === "Templates" ? <TemplateGallery search={search} onPick={(t) => { setTpl(t.id); setCreating(true); }}/>
+      : <>
+        {isLoading && <div className="h-80 animate-pulse bg-muted"/>}
+        {featured && <Link to="/p/$projectId" params={{ projectId: featured.id }} className="group mb-10 grid overflow-hidden border bg-card transition hover:border-primary md:grid-cols-[3fr_2fr]">
+          <SitePreview nodes={thumbs?.[featured.id]?.nodes ?? []} theme={thumbs?.[featured.id]?.theme ?? DEFAULT_THEME} height={340}/>
+          <div className="flex min-w-0 flex-col justify-center gap-6 p-7 sm:p-9"><p className="text-xs font-semibold uppercase text-primary">Latest project</p><h2 className="break-words text-2xl font-semibold">{featured.name}</h2><div className="flex gap-8 text-xs text-muted-foreground"><div>Created<p className="mt-1 font-semibold text-foreground">{new Date(featured.created_at).toLocaleDateString()}</p></div><div>Your role<p className="mt-1 font-semibold capitalize text-foreground">{featured.role}</p></div></div><span className="flex items-center gap-2 text-sm font-semibold text-primary">Open project <ArrowUpRight className="size-4"/></span></div>
+        </Link>}
+        <div className="grid gap-7 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.slice(1).map((p) => <Link key={p.id} to="/p/$projectId" params={{ projectId: p.id }} className="group min-w-0"><div className="overflow-hidden rounded-lg border transition group-hover:border-primary"><SitePreview nodes={thumbs?.[p.id]?.nodes ?? []} theme={thumbs?.[p.id]?.theme ?? DEFAULT_THEME} height={230}/></div><h2 className="mt-4 truncate text-sm font-semibold">{p.name}</h2><p className="mt-1 text-xs capitalize text-muted-foreground">{p.role}</p></Link>)}
+          <Button variant="ghost" onClick={() => { setTpl(""); setCreating(true); }} className="h-[230px] flex-col gap-3 border border-dashed text-muted-foreground"><Plus className="size-7 text-primary"/>New blank project</Button>
+        </div>
+        {!isLoading && filtered.length === 0 && <div className="mt-8"><h2 className="mb-6 text-xl font-semibold">Start from a template</h2><TemplateGallery search={search} onPick={(t) => { setTpl(t.id); setCreating(true); }}/></div>}
+      </>}
+    <Dialog open={creating} onOpenChange={setCreating}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>New project</DialogTitle><DialogDescription>{SITE_TEMPLATES.find((t) => t.id === tpl)?.name ?? "Blank canvas"}</DialogDescription></DialogHeader>
+      <form onSubmit={create} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><Input aria-label="Project name" required autoFocus placeholder="Project name" value={name} onChange={(e) => setName(e.target.value)}/><Button type="submit" disabled={busy || !name.trim()}>{busy ? "Creating…" : "Create"}</Button></form>
+      <div className="grid grid-cols-2 gap-3">{[{ id: "", name: "Blank page" }, ...SITE_TEMPLATES].map((t) => <Button key={t.id} variant="ghost" aria-pressed={tpl === t.id} className={`h-auto flex-col overflow-hidden border p-0 ${tpl === t.id ? "border-primary ring-1 ring-primary" : ""}`} onClick={() => setTpl(t.id)}><SitePreview nodes={"blocks" in t ? templateViews(t) : []} theme={"theme" in t ? t.theme : DEFAULT_THEME} height={160} className="w-full"/><span className="self-start p-3 text-sm">{t.name}</span></Button>)}</div>
+    </DialogContent></Dialog>
+  </WorkspaceShell>;
 }
