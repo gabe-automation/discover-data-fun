@@ -335,7 +335,7 @@ function EditorPage() {
       return room.op(crypto.randomUUID(), {
         type: b.type, parent: null, page: page.id, order, deleted: false,
         "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
-        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "",
+        text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "", attrs: b.attrs ?? {},
         ...Object.fromEntries(Object.entries(b.style ?? {}).map(([k, v]) => [`s.${k}`, v])),
         ...Object.fromEntries(Object.entries(b.box ?? {}).map(([k, v]) => [`c.${k}`, v])),
       }, "created", `${def.name} (${t.name} template)`);
@@ -403,9 +403,9 @@ function EditorPage() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 [&>*]:shrink-0">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 overflow-x-auto [&>*]:shrink-0">
         <Button variant="ghost" size="icon" asChild><Link to="/projects" aria-label="Back to projects"><ArrowLeft /></Link></Button>
-        <span className="max-w-40 truncate font-display text-lg">{info?.project?.name ?? "…"}</span>
+        <span className="max-w-40 truncate font-display text-sm font-semibold">{info?.project?.name ?? "…"}</span>
         <Button size="sm" variant={chatOpen ? "secondary" : "outline"} onClick={() => openChat()} className="relative ml-auto" aria-label="Open team chat">
           <MessagesSquare className="size-4" /> <span className="hidden sm:inline">Chat</span>
           {chat.unread > 0 && !chatOpen && <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">{chat.unread}</span>}
@@ -1199,7 +1199,7 @@ function AttrsPanel({ node, disabled, onAttrs }: { node: NodeView; disabled: boo
     for (const [k, v] of r) if (k.trim()) o[k.trim()] = v;
     if (JSON.stringify(o) !== JSON.stringify(node.attrs)) onAttrs(o);
   };
-  const presets = node.type === "input"
+  const presets: [string, string][] = node.type === "input"
     ? [["type", "email"], ["name", "email"], ["required", ""], ["minlength", "8"], ["maxlength", "120"], ["pattern", "[A-Za-z ]+"], ["autocomplete", "email"]]
     : [["aria-label", ""], ["title", ""], ["data-track", "cta"], ["role", "region"]];
   return (
@@ -1217,7 +1217,7 @@ function AttrsPanel({ node, disabled, onAttrs }: { node: NodeView; disabled: boo
       ))}
       <div className="flex flex-wrap gap-1">
         {presets.filter(([k]) => !rows.some(([x]) => x === k)).map(([k, v]) => (
-          <button key={k} disabled={disabled} onClick={() => { const r: [string, string][] = [...rows, [k!, v!]]; setRows(r); commit(r); }}
+          <button key={k} disabled={disabled} onClick={() => { const r: [string, string][] = [...rows, [k, v]]; setRows(r); commit(r); }}
             className="rounded-full border px-2 py-0.5 font-mono text-[10px] hover:border-primary disabled:opacity-50">+ {k}</button>
         ))}
         <button disabled={disabled} onClick={() => setRows((r) => [...r, ["", ""]])} className="rounded-full border border-dashed px-2 py-0.5 text-[10px] hover:border-primary">+ custom</button>
