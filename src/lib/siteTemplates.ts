@@ -75,12 +75,15 @@ export const SITE_TEMPLATES: SiteTemplate[] = [
 
 /** Template blocks as page nodes, for thumbnails. */
 export function templateViews(t: SiteTemplate): NodeView[] {
+  let mobileBottom = 0;
   return t.blocks.map((b, i) => {
     const def = BLOCKS[b.type];
     const w = Math.min(b.w ?? def.w, 1200), h = b.h ?? def.h;
     const g = { x: b.x ?? Math.round((1200 - w) / 2), y: b.y, w, h };
     const tablet = { x: Math.max(12, Math.round(g.x * BREAKPOINTS.tablet.width / BREAKPOINTS.desktop.width)), y: g.y, w: Math.min(BREAKPOINTS.tablet.width - 24, Math.round(g.w * BREAKPOINTS.tablet.width / BREAKPOINTS.desktop.width)), h: g.h };
-    const mobile = { x: 12, y: g.y, w: BREAKPOINTS.mobile.width - 24, h: g.h };
+    const mobileHeight = b.type === "pricing" ? Math.max(g.h, 720) : b.type === "cards" ? Math.max(g.h, 390) : g.h;
+    const mobile = { x: 12, y: Math.max(g.y, mobileBottom), w: BREAKPOINTS.mobile.width - 24, h: mobileHeight };
+    mobileBottom = mobile.y + mobile.h;
     return {
       id: `${t.id}-${i}-0000-0000-000000000000`, type: b.type, parent: null, order: String(i).padStart(3, "0"),
       text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "", page: null,

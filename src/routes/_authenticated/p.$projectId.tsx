@@ -328,13 +328,16 @@ function EditorPage() {
     const base = views.reduce((m, v) => Math.max(m, v.geo.desktop.y + v.geo.desktop.h), 0) + (views.length ? 48 : 0);
     let order: string | null = views.reduce<string | null>((m, v) => (!m || v.order > m ? v.order : m), null);
     const pageW = BREAKPOINTS.desktop.width;
-    const jobs = t.blocks.map((b) => {
+    const templateNodes = templateViews(t);
+    const jobs = t.blocks.map((b, i) => {
       const def = BLOCKS[b.type];
       const w = Math.min(b.w ?? def.w, pageW), h = b.h ?? def.h;
+      const geometry = templateNodes[i]?.geo;
       order = keyBetween(order, null);
       return room.op(crypto.randomUUID(), {
         type: b.type, parent: null, page: page.id, order, deleted: false,
         "x@desktop": b.x ?? Math.round((pageW - w) / 2), "y@desktop": base + b.y, "w@desktop": w, "h@desktop": h,
+        ...Object.fromEntries((["tablet", "mobile"] as const).flatMap((bp) => geometry ? Object.entries(geometry[bp]).map(([k, v]) => [`${k}@${bp}`, k === "y" ? base + v : v]) : [])),
         text: b.text ?? def.text, sub: b.sub ?? def.sub, label: b.label ?? def.label, href: b.href ?? "", attrs: b.attrs ?? {},
         ...Object.fromEntries(Object.entries(b.style ?? {}).map(([k, v]) => [`s.${k}`, v])),
         ...Object.fromEntries(Object.entries(b.box ?? {}).map(([k, v]) => [`c.${k}`, v])),
