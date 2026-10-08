@@ -142,6 +142,6 @@ ${code}
   } catch (err) { console.error("[WebCraft] #${sid}", err); }
 })(document.getElementById("${sid}"), document.querySelector("#${sid} input, #${sid} textarea, #${sid} select"));`;
   });
-  const js = `// WebCraft site runtime\n// Add block-specific logic from Edit → Logic. It will appear below.\n\ndocument.addEventListener("click", (event) => {\n  const link = event.target.closest('a[href^="#"]');\n  if (!link) return;\n  const target = document.querySelector(link.getAttribute("href"));\n  if (target) {\n    event.preventDefault();\n    target.scrollIntoView({ behavior: "smooth", block: "start" });\n  }\n});\n\n${scripts.length ? scripts.join("\n\n") : "// No block-specific logic has been added yet."}\n`;
+  const js = `// WebCraft site runtime\n// Add block-specific logic from Edit → Logic. It will appear below.\n\ndocument.addEventListener("click", (event) => {\n  if (!(event.target instanceof Element)) return;\n  const link = event.target.closest('a[href^="#"]');\n  if (!link) return;\n  const target = document.getElementById(link.getAttribute("href").slice(1));\n  if (target) {\n    event.preventDefault();\n    target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });\n  }\n});\n\n${scripts.length ? scripts.join("\n\n") : "// No block-specific logic has been added yet."}\n`;
   return { html, css, js };
 }

@@ -230,9 +230,11 @@ export function Whiteboard(p: {
       setLocal(null);
       if (!moved) return;
       p.ops.sendDrag({ id: w.id, bp: "wb", ...last, done: true });
-      wop(w.id, { x: Math.round(last.x), y: Math.round(last.y), w: Math.round(last.w), h: Math.round(last.h) }, resize ? "resized" : "moved", label(w));
-      const dx = last.x - orig.x, dy = last.y - orig.y;
-      for (const o of inside) if (!lockedByOther(o.id) && !pinned(o.id)) wop(o.id, { x: o.x + dx, y: o.y + dy }, "moved", label(o));
+      void inBatch(async () => {
+        await wop(w.id, { x: Math.round(last.x), y: Math.round(last.y), w: Math.round(last.w), h: Math.round(last.h) }, resize ? "resized" : "moved", label(w));
+        const dx = last.x - orig.x, dy = last.y - orig.y;
+        await Promise.all(inside.filter((o) => !lockedByOther(o.id) && !pinned(o.id)).map((o) => wop(o.id, { x: o.x + dx, y: o.y + dy }, "moved", label(o))));
+      });
     };
     window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up);
   }
@@ -336,7 +338,7 @@ export function Whiteboard(p: {
 
       {/* selection bar */}
       {sel && (
-        <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-xl border bg-card px-3 py-1.5 text-sm shadow-lift">
+        <div className="absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-lg border bg-card px-3 py-1.5 text-sm shadow-lift [&>*]:shrink-0">
           <span className="font-medium">{NAMES[sel.shape]}</span>
           {selPin && !selLocked && (
             <span className="flex items-center gap-1 text-muted-foreground">{selPin.mode === "move" ? <Pin className="size-3.5" /> : <Lock className="size-3.5" />} {selPin.mode === "move" ? "Pinned" : "Locked"} by {selPin.locked_by_name}</span>
