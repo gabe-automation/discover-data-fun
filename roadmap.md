@@ -25,8 +25,9 @@
 - [x] Visible "New blank page" button
 
 ## Next
-- [ ] Refresh WebCraft UI and templates using the selected Silver & Teal focused-sidebar direction
-- [ ] Verify attributes, scripts, hosting export, and whiteboard controls in a signed-in workspace
+- [x] Refresh WebCraft UI and templates using the selected Silver & Teal focused-sidebar direction; public gallery checked on desktop, tablet, and phone
+- [x] Verify exported input attributes and JavaScript through browser typing, and ZIP asset/page-link packaging
+- [ ] Verify project creation, editor persistence, whiteboard undo/redo, member removal and multi-user collaboration — blocked until the requesting user signs into the preview
 - [x] Keep chat reachable and confirm send/receive in a signed-in project
 - [x] Polish website templates and make their actions configurable in preview, published pages, and exported sites
 - [ ] Revision history + rollback
