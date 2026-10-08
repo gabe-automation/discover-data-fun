@@ -47,7 +47,7 @@ export const BLOCKS: Record<BlockType, BlockDef> = {
 };
 
 export type Theme = { primary: string; accent: string; surface: string; ink: string };
-export const DEFAULT_THEME: Theme = { primary: "#c2410c", accent: "#4d7c0f", surface: "#faf7f2", ink: "#1c1917" };
+export const DEFAULT_THEME: Theme = { primary: "#008A83", accent: "#183238", surface: "#F4F7F8", ink: "#183238" };
 
 export function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -85,7 +85,7 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
     case "navbar":
       return `<nav class="wc-nav" aria-label="Main"><strong class="wc-brand">${t}</strong><ul>${split(c.sub).map((x) => `<li><span>${esc(x)}</span></li>`).join("")}</ul>${action(l)}</nav>`;
     case "hero":
-      return `<section class="wc-hero"><h1>${t}</h1><p>${s}</p>${action(l)}</section>`;
+      return `<section class="wc-hero${c.attrs?.["data-cover"] ? " wc-hero-cover" : ""}">${c.attrs?.["data-cover"] ? `<img class="wc-cover" src="${esc(c.attrs["data-cover"])}" alt="" width="1536" height="1024">` : ""}<h1>${t}</h1><p>${s}</p>${action(l)}</section>`;
     case "heading":
       return `<h2 class="wc-heading" id="work">${t}</h2>`;
     case "text":
@@ -93,7 +93,7 @@ export function blockHtml(type: BlockType, c: BlockContent, id: string): string 
     case "button":
       return action(l);
     case "image":
-      return `<figure class="wc-image"><div class="wc-image-art" role="img" aria-label="${t}"></div><figcaption>${t}</figcaption></figure>`;
+      return `<figure class="wc-image">${c.attrs?.["data-image"] ? `<img class="wc-image-photo" src="${esc(c.attrs["data-image"])}" alt="${t}" loading="lazy" width="1536" height="1024">` : `<div class="wc-image-art" role="img" aria-label="${t}"></div>`}<figcaption>${t}</figcaption></figure>`;
     case "cards": {
       const titles = split(c.text), subs = split(c.sub);
       return `<section class="wc-cards" id="features">${titles.map((x, i) => `<article class="wc-card"><h3>${esc(x)}</h3><p>${esc(subs[i] ?? "")}</p></article>`).join("")}</section>`;
@@ -131,22 +131,28 @@ export function themeVars(t: Theme): string {
 
 // Shared block styles — used by the live canvas AND the exported styles.css.
 export const BLOCK_CSS = `
-.wc-page{position:relative;background:var(--wc-surface);color:var(--wc-ink);font-family:Georgia,'Times New Roman',serif;}
+.wc-page{position:relative;background:var(--wc-surface);color:var(--wc-ink);font-family:'Manrope',system-ui,sans-serif;}
 .wc-page:has(.wc-hero){background:color-mix(in srgb,var(--wc-surface) 96%,var(--wc-accent))}
 .wc-page *{box-sizing:border-box;}
 .wc-el{position:absolute;overflow:hidden;}
-.wc-btn{display:inline-flex;align-items:center;justify-content:center;height:100%;min-height:40px;padding:0 22px;border-radius:999px;background:var(--wc-primary);color:var(--wc-surface);font:600 15px/1 system-ui,sans-serif;border:0;text-decoration:none;cursor:pointer;}
+.wc-page h1,.wc-page h2,.wc-page h3{font-family:Sora,system-ui,sans-serif;letter-spacing:0;}
+.wc-btn{display:inline-flex;align-items:center;justify-content:center;height:100%;min-height:40px;padding:0 22px;border-radius:6px;background:var(--wc-primary);color:var(--wc-surface);font:600 15px/1 system-ui,sans-serif;border:0;text-decoration:none;cursor:pointer;}
 .wc-btn:hover{filter:brightness(.88);transform:translateY(-1px)}.wc-btn:focus-visible{outline:3px solid var(--wc-accent);outline-offset:3px}.wc-btn-unset{opacity:.6;cursor:default}.wc-btn-unset:hover{filter:none;transform:none}
 .wc-el>.wc-btn{width:100%;}
 .wc-nav{height:100%;display:flex;align-items:center;gap:32px;padding:0 40px;border-bottom:1px solid color-mix(in srgb,var(--wc-ink) 12%,transparent);font-family:system-ui,sans-serif;}
-.wc-nav .wc-brand{font:600 20px Georgia,serif;}
+.wc-nav .wc-brand{font:700 20px Sora,system-ui,sans-serif;}
 .wc-nav ul{display:flex;gap:24px;list-style:none;margin:0 auto 0 0;padding:0;}
 .wc-nav a{color:inherit;text-decoration:none;font-size:14px;}
 .wc-nav .wc-btn{height:40px;color:var(--wc-surface);}
-.wc-hero{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:28px;padding:64px 80px;border-bottom:1px solid color-mix(in srgb,var(--wc-ink) 13%,transparent);background:radial-gradient(circle at 88% 28%,color-mix(in srgb,var(--wc-accent) 20%,var(--wc-surface)),transparent 48%);}
-.wc-hero h1{font-size:clamp(48px,6vw,92px);line-height:1.03;margin:0;max-width:850px;font-weight:500;}
+.wc-hero{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:28px;padding:64px 80px;border-bottom:1px solid color-mix(in srgb,var(--wc-ink) 13%,transparent);background:var(--wc-surface);position:relative;}
+.wc-hero h1{font-size:72px;font-family:Sora,system-ui,sans-serif;line-height:1.03;margin:0;max-width:850px;font-weight:700;}
 .wc-hero p{font:20px/1.55 system-ui,sans-serif;max-width:570px;margin:0;opacity:.72;}
 .wc-hero .wc-btn{height:48px;}
+.wc-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;}
+.wc-hero-cover>*:not(img){position:relative;z-index:1;max-width:680px;}
+.wc-hero-cover{background:var(--wc-surface);justify-content:flex-end;padding:40px;}
+.wc-hero-cover h1,.wc-hero-cover p{background:var(--wc-surface);padding:10px 16px;}
+.wc-image-photo{width:100%;height:calc(100% - 24px);object-fit:cover;}
 .wc-heading{margin:0;padding:52px 80px 16px;font-size:44px;line-height:1.1;font-weight:500;}
 .wc-text{margin:0;font:17px/1.6 system-ui,sans-serif;opacity:.8;}
 .wc-image{margin:0;height:100%;display:flex;flex-direction:column;gap:8px;}
@@ -165,7 +171,7 @@ export const BLOCK_CSS = `
 .wc-quote p{margin:0;font-size:26px;line-height:1.3;font-style:italic;}
 .wc-quote footer{font:14px system-ui,sans-serif;opacity:.65;}
 .wc-form{height:100%;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:12px;padding:28px 80px;border-top:1px solid color-mix(in srgb,var(--wc-ink) 14%,transparent);font-family:system-ui,sans-serif;}
-.wc-form h3{margin:0 0 4px;font:600 22px Georgia,serif;}
+.wc-form h3{margin:0 0 4px;font:600 22px Sora,system-ui,sans-serif;}
 .wc-form label{display:flex;flex-direction:column;gap:4px;font-size:13px;}
 .wc-form input{height:38px;border-radius:8px;border:1px solid color-mix(in srgb,var(--wc-ink) 20%,transparent);padding:0 10px;background:white;font:inherit;}
 .wc-form p{font:15px/1.5 system-ui,sans-serif;opacity:.7}.wc-form .wc-btn{height:44px;margin-top:12px;}
@@ -180,7 +186,8 @@ export const BLOCK_CSS = `
 .wc-box{height:100%;padding:16px;border-radius:14px;border:1px dashed color-mix(in srgb,var(--wc-ink) 22%,transparent);font:15px system-ui,sans-serif;}
 .wc-item{flex:1;min-width:0;min-height:56px;display:flex;align-items:center;justify-content:center;padding:14px;border-radius:10px;background:color-mix(in srgb,var(--wc-primary) 10%,var(--wc-surface));border:1px solid color-mix(in srgb,var(--wc-primary) 25%,transparent);text-align:center;}
 .wc-box-absolute .wc-item{position:absolute;width:46%;height:46%;box-shadow:0 10px 24px -14px rgba(0,0,0,.4);}
-@media (max-width:640px){.wc-box-flex{flex-direction:column!important}.wc-box-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media (max-width:1024px){.wc-hero{padding:36px}.wc-hero h1{font-size:52px}.wc-nav{gap:16px;padding:0 24px}.wc-heading{padding:40px 24px 16px}}
+@media (max-width:640px){.wc-hero{padding:24px;gap:18px}.wc-hero h1{font-size:36px;overflow-wrap:anywhere}.wc-hero p{font-size:16px}.wc-nav{padding:0 16px;gap:12px}.wc-nav ul{display:none}.wc-brand{margin-right:auto}.wc-heading{font-size:28px}.wc-cards,.wc-pricing{padding:20px;gap:10px;grid-template-columns:1fr}.wc-card,.wc-plan{padding:18px}.wc-quote,.wc-form,.wc-section{padding:24px}.wc-footer{padding:16px;gap:12px;flex-wrap:wrap}.wc-box-flex{flex-direction:column!important}.wc-box-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 `;
 
 // Per-block design overrides (stored as "s.<key>" properties on the node).

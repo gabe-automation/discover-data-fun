@@ -10,3 +10,5 @@
 <!-- LOVABLE:END -->
 - Persistent node locks live in `node_locks` and are enforced inside `apply_node_op`; why: clients can't bypass them.
 - Published project pages are snapshots in `published_sites.pages_html`, served with `?page=<id>`; why: each configured button destination remains public without exposing editable project data.
+- Public template browsing and authenticated project browsing share the WorkspaceShell and TemplateGallery presentation; why: navigation and preview interactions stay consistent without exposing private project data.
+- Template media is stored as node attributes and rendered by the shared block renderer; why: previews, canvas, published snapshots, and static exports use the same content.
